@@ -11,7 +11,7 @@ coverage/
 .env.local
 .env.*
 !.env.example
-
+.venv/
 # OS/IDE
 .DS_Store
 Thumbs.db

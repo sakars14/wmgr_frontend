@@ -1,0 +1,47 @@
+﻿.env.local
+.git
+.gitignore
+.next
+.venv
+components
+components\NavBar.js
+frontend_tree.txt
+lib
+lib\api.js
+lib\firebase.js
+lib\firebaseClient.ts
+lib\riskQuestions.js
+lib\rzp.js
+lib\useAdmin.js
+lib\usePlan.js
+next.config.js
+next-env.d.ts
+node_modules
+package.json
+package-lock.json
+pages
+pages\_app copy.js
+pages\_app.js
+pages\admin copy.js
+pages\admin.js
+pages\bucket
+pages\bucket\[id].js
+pages\buckets.js
+pages\connect copy.js
+pages\connect.js
+pages\index.js
+pages\login.js
+pages\onboarding.js
+pages\plans.js
+pages\profile.js
+pages\zerodha-status.js
+public
+public\growfolio-safe.svg
+styles
+styles copy.css
+styles.css
+styles\AuthPage.module.css
+styles\Onboarding.module.css
+styles\PlansPage.module.css
+styles\ProfilePage.module.css
+testing.txt

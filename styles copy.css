@@ -1,0 +1,122 @@
+/* styles.css — GrowFolio-ish light theme that keeps your class names */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+:root{
+  --gf-bg:#f7fafc;           /* page bg */
+  --gf-ink:#0b1d2a;          /* text */
+  --gf-muted:#5b6b7a;        /* secondary text */
+  --gf-primary:#0b2f4a;      /* accent 1 */
+  --gf-primary-2:#153e5f;    /* accent 2 */
+  --gf-chip:#e9f1fa;         /* chip bg */
+  --gf-line:#e4ecf4;         /* borders */
+}
+
+html,body,#__next{height:100%}
+body{
+  margin:0;
+  background:var(--gf-bg);
+  color:var(--gf-ink);
+  font:16px/1.55 "Inter",system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+}
+
+/* subtle geometric background */
+body::before{
+  content:"";
+  position:fixed; inset:0; z-index:-1; opacity:.16;
+  background-image:url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='120' height='104' viewBox='0 0 173.2 150'>\
+<g fill='none' stroke='%23d5dee8' stroke-width='1'>\
+<path d='M86.6 0l86.6 50v50l-86.6 50L0 100V50z'/>\
+<path d='M0 50l86.6 50 86.6-50'/>\
+</g></svg>");
+  background-size:220px 200px;
+}
+
+.container{ max-width:1080px; margin:0 auto; padding:24px }
+
+/* ===== NAV / HEADER ===== */
+.header{
+  position:sticky; top:0; z-index:10;
+  padding:14px 24px;
+  border-bottom:1px solid var(--gf-line);
+  background:#fff;
+}
+.nav{ display:flex; align-items:center; gap:20px; }
+.brand{ font-weight:800; letter-spacing:.2px; }
+.links{ display:flex; align-items:center; gap:16px; } /* if you use it elsewhere */
+.spacer{ flex:1 1 auto; }
+.nav-right{ display:flex; align-items:center; gap:12px; }
+.nav a{ color:var(--gf-ink); text-decoration:none; font-weight:600; opacity:.86; }
+.nav a:hover{ color:var(--gf-primary); opacity:1; }
+
+.badge, .chip{ padding:4px 10px; border-radius:999px; font-size:.8rem; }
+.badge.plan{ background:var(--gf-chip); color:var(--gf-primary); }
+.user{ opacity:.85; margin:0 6px; }
+
+/* Buttons */
+.btn{
+  color:#fff; background:linear-gradient(90deg,var(--gf-primary),var(--gf-primary-2));
+  border:0; border-radius:999px; padding:10px 14px; cursor:pointer;
+  text-decoration:none; font-weight:600; font-size:.95rem;
+}
+.btn:disabled{ opacity:.6; cursor:not-allowed }
+.btn-ghost{
+  background:transparent; border:1px dashed var(--gf-line); color:var(--gf-ink);
+}
+
+/* ===== CARDS / GRID / UTIL ===== */
+.card{
+  position:relative; border:1px solid var(--gf-line); border-radius:14px;
+  padding:18px; background:#fff; margin:16px 0;
+}
+.card-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.card-title{ margin:0; font-size:1.05rem; }
+.card .muted{ color:var(--gf-muted); font-size:.95rem; }
+
+.page-head{ display:flex; align-items:center; gap:12px; }
+.grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:18px; }
+
+.list{ display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; padding:0; list-style:none }
+.row{ display:flex; align-items:center; justify-content:space-between; padding:8px 0 }
+
+.mono{ font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:13px; color:var(--gf-muted) }
+.error{ color:#c0392b }
+.center{ display:grid; place-items:center; height:100% }
+a.btn{ display:inline-block; margin-top:8px }
+
+/* lock / chips */
+.chip-ok{ background:#e8f6ee; color:#215b38; }
+.chip-locked{ background:#fdeaea; color:#7e2b2b; }
+.lock{ font-size:1.05rem; }
+.lock-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.06); border-radius:10px; pointer-events:none; }
+
+/* alerts */
+.alert{ margin:12px 0; padding:10px 12px; border-radius:8px; background:#fff3e6; color:#7a4d17; border:1px solid #ffe1bf; }
+
+.topbar-profile {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  color: #111827;
+}
+
+.topbar-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #dbeafe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
+  color: #1d4ed8;
+}
+
+.topbar-name {
+  font-size: 14px;
+  font-weight: 500;
+}

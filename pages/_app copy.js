@@ -10,9 +10,8 @@ export default function App({ Component, pageProps }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  //const showNav = router.pathname !== "/";
-  const hideNavOn = ["/login"];
-  const showNav = !hideNavOn.includes(router.pathname);
+  const showNav = router.pathname !== "/";
+
   useEffect(() => onAuthStateChanged(auth, (u) => {
     setUser(u);
     setLoading(false);
@@ -29,4 +28,3 @@ export default function App({ Component, pageProps }) {
     </div>
   );
 }
-

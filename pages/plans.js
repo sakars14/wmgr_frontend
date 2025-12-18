@@ -1,170 +1,334 @@
 // pages/plans.js
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { auth } from '../lib/firebase';
-import { loadRazorpay } from '../lib/rzp';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { auth, db } from "../lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import styles from "../styles/PlansPage.module.css";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
-const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+const PLANS = [
+  {
+    id: "standard",           // backend code
+    slug: "safety",
+    name: "Safety plan",
+    label: "Low risk · Capital protection",
+    price: 1000,
+    tag: "Best for conservative investors",
+    features: [
+      "Access to low-volatility, capital-protection model portfolios",
+      "Suggested buckets tuned for emergency fund & steady income",
+      "Guidance on plugging protection gaps (insurance, buffer)",
+    ],
+    allocation: [
+      { label: "Equity", value: "20%" },
+      { label: "Debt & fixed income", value: "60%" },
+      { label: "Gold / alternatives", value: "20%" },
+    ],
+  },
+  {
+    id: "pro",
+    slug: "balanced",
+    name: "Balanced plan",
+    label: "Moderate risk · Steady growth",
+    price: 3000,
+    tag: "Recommended for most investors",
+    features: [
+      "Core diversified portfolio across equity, debt and gold",
+      "Model buckets aligned with your goals and time horizon",
+      "Ongoing allocation view so you know when to rebalance",
+    ],
+    allocation: [
+      { label: "Equity", value: "50%" },
+      { label: "Debt & fixed income", value: "40%" },
+      { label: "Gold / alternatives", value: "10%" },
+    ],
+  },
+  {
+    id: "max",
+    slug: "growth",
+    name: "Growth plan",
+    label: "Higher risk · Higher potential",
+    price: 5000,
+    tag: "For aggressive, long-term investors",
+    features: [
+      "High-growth, equity-oriented model portfolios",
+      "Buckets tilted towards long-term themes and sectors",
+      "Clear risk view so you know how much downside to expect",
+    ],
+    allocation: [
+      { label: "Equity", value: "75%" },
+      { label: "Debt & fixed income", value: "20%" },
+      { label: "Gold / alternatives", value: "5%" },
+    ],
+  },
+];
 
-export default function Plans({ user }) {
-  const [plan, setPlan] = useState('none');
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
-  const isAdmin = !!user && user.email === ADMIN_EMAIL;
 
-  // fetch current plan (custom claim)
+// Load Razorpay script once
+async function loadRazorpayScript() {
+  if (typeof window === "undefined") return false;
+  if (window.Razorpay) return true;
+
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+export default function PlansPage() {
+  const router = useRouter();
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [recommendedPlanId, setRecommendedPlanId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busyPlanId, setBusyPlanId] = useState(null);
+  const [message, setMessage] = useState("");
+
+  // Load user + profile + mark recommended plan from riskQuiz
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      if (!user) { setPlan('none'); setEmail(''); return; }
-      setEmail(user.email || '');
-      const res = await auth.currentUser.getIdTokenResult(true);
-      if (alive) setPlan(res.claims?.plan || 'none');
-    })();
-    return () => { alive = false; };
-  }, [user]);
+    const unsub = auth.onAuthStateChanged(async (u) => {
+      if (!u) {
+        router.replace("/");
+        return;
+      }
 
-  async function setServerPlan(newPlan) {
+      setUser(u);
+      try {
+        const ref = doc(db, "clientProfiles", u.uid);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          const data = snap.data();
+          setProfile(data);
+
+          const riskLabel = data.riskQuiz?.riskLabel || "";
+          if (riskLabel === "Conservative") {
+            setRecommendedPlanId("standard");
+          } else if (riskLabel === "Balanced") {
+            setRecommendedPlanId("pro");
+          } else if (riskLabel) {
+            // Aggressive / Outlier etc → growth
+            setRecommendedPlanId("max");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load profile", err);
+        setMessage("Could not load your profile. You can still choose a plan.");
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    return () => unsub();
+  }, [router]);
+
+  const handleBuy = async (planId) => {
     try {
-      setBusy(true);
-      const token = await auth.currentUser.getIdToken();
-      const resp = await fetch(`${API_BASE}/dev/grant-plan?plan=${encodeURIComponent(newPlan)}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      await auth.currentUser.reload();
-      const res = await auth.currentUser.getIdTokenResult(true);
-      setPlan(res.claims?.plan || 'none');
-      alert(`Plan set to ${newPlan}`);
-    } catch (e) {
-      alert(`Failed: ${e}`);
-    } finally { setBusy(false); }
-  }
+      setMessage("");
+      setBusyPlanId(planId);
 
-  async function subscribe(newPlan) {
-    try {
-      setBusy(true);
-      const token = await auth.currentUser.getIdToken();
-      // 1) create server order
-      const r1 = await fetch(`${API_BASE}/billing/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ plan: newPlan })
-      });
-      if (!r1.ok) throw new Error(await r1.text());
-      const { key, order } = await r1.json();
+      const ok = await loadRazorpayScript();
+      if (!ok) {
+        setMessage("Unable to load Razorpay. Check your connection and try again.");
+        setBusyPlanId(null);
+        return;
+      }
 
-      // 2) load checkout
-      await loadRazorpay();
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        router.replace("/");
+        return;
+      }
+
+      const token = await currentUser.getIdToken();
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/billing/order`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ plan: planId }),
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to create order");
+      }
+
+      const { key, order } = data;
+      const planDef = PLANS.find((p) => p.id === planId);
+
       const rzp = new window.Razorpay({
         key,
         amount: order.amount,
         currency: order.currency,
-        name: 'WMGR',
-        description: `${newPlan.toUpperCase()} Subscription`,
+        name: "Growfolio",
+        description: planDef ? planDef.name : "Investment plan",
         order_id: order.id,
-        prefill: { email: user.email || '' },
-        theme: { color: '#0a3d62' },
+        prefill: {
+          name: profile?.personal?.name || "",
+          email: currentUser.email || "",
+        },
+        theme: { color: "#2563eb" },
         handler: async (response) => {
-          // 3) confirm on server
           try {
-            const r2 = await fetch(`${API_BASE}/billing/confirm`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                plan: newPlan
-              })
-            });
-            if (!r2.ok) throw new Error(await r2.text());
-            // refresh token -> plan pill updates immediately
-            await auth.currentUser.reload();
-            const res = await auth.currentUser.getIdTokenResult(true);
-            setPlan(res.claims?.plan || 'none');
-            alert('Subscription activated!');
-          } catch (e) {
-            alert(`Confirm failed: ${e}`);
+            const confirmRes = await fetch(
+              `${process.env.NEXT_PUBLIC_API_BASE_URL}/billing/confirm`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  plan: planId,
+                }),
+              }
+            );
+
+            const confirmData = await confirmRes.json();
+            if (!confirmRes.ok) {
+              throw new Error(
+                confirmData.detail || "Payment confirmation failed"
+              );
+            }
+
+            setMessage(
+              `Payment successful. Your ${planDef?.name || "plan"} is active.`
+            );
+          } catch (err) {
+            console.error(err);
+            setMessage(
+              err.message ||
+                "Payment captured but confirmation failed. Please contact support."
+            );
+          } finally {
+            setBusyPlanId(null);
           }
-        }
+        },
+        modal: {
+          ondismiss: () => {
+            setBusyPlanId(null);
+            setMessage("Payment popup closed.");
+          },
+        },
       });
 
       rzp.open();
-    } catch (e) {
-      alert(`Subscribe failed: ${e}`);
-    } finally { setBusy(false); }
-  }
+    } catch (err) {
+      console.error(err);
+      setBusyPlanId(null);
+      setMessage(err.message || "Something went wrong. Please try again.");
+    }
+  };
 
   return (
-    <div className="container">
-      <h1>Subscription plans</h1>
-      <p>
-        <strong>Your email:</strong> {email || '—'} &nbsp;|&nbsp;
-        <strong>Current plan:</strong> {plan}
-      </p>
-
-      <div className="plans">
-        <div className="card">
-          <h2>Standard</h2>
-          <p>₹199/month</p>
-          <p>Access to 5 basic buckets.</p>
-          {isAdmin ? (
-            <button disabled={busy} onClick={() => setServerPlan('standard')}>
-              {busy ? 'Applying…' : 'Make me Standard (admin)'}
-            </button>
-          ) : (
-            <button className="btn" disabled={busy} onClick={() => subscribe('standard')}>
-              {busy ? 'Processing…' : 'Subscribe'}
-            </button>
+    <div className={styles.page}>
+      <main className={styles.main}>
+        <header className={styles.headingRow}>
+          <div>
+            <h1 className={styles.title}>Investment plans</h1>
+            <p className={styles.subtitle}>
+              Pick a plan based on your comfort with risk. You only pay once for
+              a detailed, personalised allocation.
+            </p>
+          </div>
+          {profile?.riskQuiz?.riskLabel && (
+            <div className={styles.riskChip}>
+              <span>{profile.riskQuiz.riskLabel} investor</span>
+              {profile.riskQuiz.totalScore != null && (
+                <span className={styles.riskScore}>
+                  {" "}
+                  · Score {profile.riskQuiz.totalScore}
+                </span>
+              )}
+            </div>
           )}
-        </div>
+        </header>
 
-        <div className="card">
-          <h2>Pro</h2>
-          <p>₹499/month</p>
-          <p>Standard + 3 advanced buckets.</p>
-          {isAdmin ? (
-            <button disabled={busy} onClick={() => setServerPlan('pro')}>
-              {busy ? 'Applying…' : 'Make me Pro (admin)'}
-            </button>
-          ) : (
-            <button className="btn" disabled={busy} onClick={() => subscribe('pro')}>
-              {busy ? 'Processing…' : 'Subscribe'}
-            </button>
-          )}
-        </div>
+        {loading ? (
+          <p className={styles.info}>Loading your profile…</p>
+        ) : (
+          <section className={styles.cardsGrid}>
+            {PLANS.map((plan) => {
+              const isRecommended = plan.id === recommendedPlanId;
+              const busy = busyPlanId === plan.id;
+              return (
+                <article
+                  key={plan.id}
+                  className={`${styles.planCard} ${
+                    isRecommended ? styles.planCardHighlight : ""
+                  }`}
+                >
+                  <div className={styles.planHeader}>
+                    <h2 className={styles.planName}>{plan.name}</h2>
+                    {isRecommended && (
+                      <span className={styles.recommendedTag}>Recommended</span>
+                    )}
+                  </div>
+                  <p className={styles.planLabel}>{plan.label}</p>
 
-        <div className="card">
-          <h2>Max</h2>
-          <p>₹999/month</p>
-          <p>All 10 buckets + future alpha sets.</p>
-          {isAdmin ? (
-            <button disabled={busy} onClick={() => setServerPlan('max')}>
-              {busy ? 'Applying…' : 'Make me Max (admin)'}
-            </button>
-          ) : (
-            <button className="btn" disabled={busy} onClick={() => subscribe('max')}>
-              {busy ? 'Processing…' : 'Subscribe'}
-            </button>
-          )}
-        </div>
-      </div>
+                  <div className={styles.priceRow}>
+                    <span className={styles.priceSymbol}>₹</span>
+                    <span className={styles.priceValue}>{plan.price}</span>
+                    <span className={styles.pricePeriod}>one-time</span>
+                  </div>
 
-      <div style={{ marginTop: 24 }}>
-        <Link href="/buckets">Go to buckets →</Link>
-      </div>
+                  <p className={styles.planTag}>{plan.tag}</p>
 
-      <style jsx>{`
-        .plans { display:grid; gap:20px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); margin-top:16px; }
-        .card { border:1px solid #333; border-radius:12px; padding:16px; background:rgba(255,255,255,0.02); }
-        .card h2{ margin:0 0 8px; }
-        .card p{ margin:4px 0; }
-        .btn{ margin-top:10px; padding:8px 12px; border-radius:8px; border:1px solid #555; background:#111; color:#eee; cursor:pointer; }
-        .btn:disabled{ opacity:.5; cursor:not-allowed; }
-      `}</style>
+                  {/* top separator */}
+                  <div className={styles.cardDivider} />
+
+                  {/* teaser bullets */}
+                  <ul className={styles.featuresList}>
+                    {plan.features.map((text) => (
+                      <li key={text} className={styles.featureItem}>
+                        {text}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* second separator before allocation */}
+                  <div className={styles.cardDivider} />
+
+                  {/* high-level allocation preview */}
+                  <ul className={styles.allocationList}>
+                    {plan.allocation.map((item) => (
+                      <li
+                        key={item.label}
+                        className={styles.allocationItem}
+                      >
+                        <span>{item.label}</span>
+                        <span className={styles.allocationValue}>
+                          {item.value}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <button
+                    className="btn"
+                    onClick={() => handleBuy(plan.id)}
+                    disabled={busy}
+                  >
+                    {busy ? "Processing…" : "Choose this plan"}
+                  </button>
+                </article>
+              );
+            })}
+          </section>
+        )}
+
+        {message && <p className={styles.statusMessage}>{message}</p>}
+      </main>
     </div>
   );
 }

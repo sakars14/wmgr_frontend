@@ -1,0 +1,449 @@
+/* styles/Onboarding.module.css */
+
+.shell {
+    min-height: 100vh;
+    padding: 32px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #221b18;
+  }
+  
+  .card {
+    width: 100%;
+    max-width: 1120px;
+    background: #f7f1eb;
+    border-radius: 32px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+    display: flex;
+    overflow: hidden;
+  }
+  
+  /* Left pane / stepper */
+  
+  .leftPane {
+    width: 32%;
+    min-width: 260px;
+    background: #fbf7f3;
+    padding: 32px 28px 32px 32px;
+    border-right: 1px solid rgba(0, 0, 0, 0.06);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 24px;
+  }
+  
+  .logoRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  
+  .logoDot {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f4ab56, #f47d3d);
+  }
+  
+  .logoText {
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    color: #5b4738;
+  }
+  
+  .leftHeading {
+    font-size: 1.8rem;
+    line-height: 1.15;
+    color: #291b15;
+    margin: 8px 0 10px;
+  }
+  
+  .highlight {
+    color: #f47d3d;
+  }
+  
+  .leftBody {
+    font-size: 0.95rem;
+    color: #786256;
+    line-height: 1.4;
+  }
+  
+  .stepList {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .stepItem {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 14px;
+    transition: background 0.2s ease, transform 0.15s ease;
+  }
+  
+  .stepItemActive {
+    background: rgba(244, 125, 61, 0.12);
+    transform: translateX(2px);
+  }
+  
+  .stepItemDone {
+    opacity: 0.9;
+  }
+  
+  .stepBullet {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    border: 1px solid rgba(120, 98, 86, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #7a6051;
+    background: #fff;
+  }
+  
+  .stepItemActive .stepBullet {
+    border-color: #f47d3d;
+    background: #f47d3d;
+    color: #fff9f4;
+  }
+  
+  .stepTitle {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #3a261c;
+  }
+  
+  .stepSubtitle {
+    font-size: 0.78rem;
+    color: #8d7464;
+    margin-top: 2px;
+  }
+  
+  /* Right pane / main form */
+  
+  .rightPane {
+    flex: 1;
+    padding: 32px 40px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .stepHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 16px;
+  }
+  
+  .stepHeading {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #322019;
+  }
+  
+  .stepCounter {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #a08a7a;
+  }
+  
+  .stepBody {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  
+  .sectionTitle {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #3a261c;
+    margin-bottom: 4px;
+  }
+  
+  .sectionTitleSmall {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #3a261c;
+    margin-bottom: 6px;
+  }
+  
+  .sectionSubtitle {
+    font-size: 0.9rem;
+    color: #8d7464;
+    margin-bottom: 18px;
+  }
+  
+  .sectionDivider {
+    height: 1px;
+    background: rgba(0, 0, 0, 0.06);
+    margin: 20px 0 14px;
+  }
+  
+  /* Form controls */
+  
+  .fieldRow {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 14px;
+  }
+  
+  .inlineRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 6px;
+  }
+  
+  .labelRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  
+  .label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #4a3124;
+    margin-bottom: 4px;
+  }
+  
+  .hint {
+    font-size: 0.75rem;
+    color: #a08a7a;
+  }
+  
+  .input,
+  .select {
+    border-radius: 12px;
+    border: 1px solid rgba(90, 70, 58, 0.2);
+    padding: 10px 12px;
+    font-size: 0.9rem;
+    background: #fffdf9;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease,
+      background 0.15s ease;
+  }
+  
+  .input:focus,
+  .select:focus {
+    border-color: #f47d3d;
+    box-shadow: 0 0 0 1px rgba(244, 125, 61, 0.35);
+    background: #fffaf4;
+  }
+  
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 18px;
+    margin-top: 6px;
+  }
+  
+  /* Card-style options */
+  
+  .optionGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-top: 8px;
+  }
+  
+  .optionCard {
+    border-radius: 16px;
+    border: 1px solid rgba(90, 70, 58, 0.15);
+    background: #fffdf9;
+    padding: 12px 10px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #5b4738;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, border-color 0.15s ease,
+      transform 0.1s ease, box-shadow 0.15s ease;
+  }
+  
+  .optionCard:hover {
+    border-color: #f4ab56;
+    background: #fff6ec;
+  }
+  
+  .optionCardSelected {
+    border-color: #f47d3d;
+    background: #f47d3d;
+    color: #fffaf6;
+    box-shadow: 0 6px 16px rgba(244, 125, 61, 0.25);
+    transform: translateY(-1px);
+  }
+  
+  /* Buttons */
+  
+  .navButtons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 20px;
+  }
+  
+  .primaryButton,
+  .secondaryButton {
+    border-radius: 999px;
+    border: none;
+    font-size: 0.9rem;
+    padding: 10px 22px;
+    cursor: pointer;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s ease, box-shadow 0.15s ease,
+      background 0.15s ease, opacity 0.15s ease;
+  }
+  
+  .primaryButton {
+    background: #2f221b;
+    color: #fff9f4;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+  
+  .primaryButton:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  }
+  
+  .primaryButton:disabled {
+    opacity: 0.6;
+    cursor: default;
+    transform: none;
+    box-shadow: none;
+  }
+  
+  .secondaryButton {
+    background: transparent;
+    color: #5b4738;
+    border: 1px solid rgba(90, 70, 58, 0.4);
+  }
+  
+  .secondaryButton:hover {
+    background: rgba(0, 0, 0, 0.02);
+  }
+  
+  /* Error + loading state */
+  
+  .errorBanner {
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #ffe9e6;
+    color: #7c3224;
+    font-size: 0.85rem;
+    border: 1px solid #f5b0a2;
+  }
+  
+  .fullPageCenter {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #221b18;
+    color: #fffaf4;
+    font-size: 0.95rem;
+  }
+  
+  .loader {
+    padding: 12px 16px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.28);
+  }
+  
+  /* Responsive */
+  
+  @media (max-width: 900px) {
+    .card {
+      flex-direction: column;
+      border-radius: 24px;
+    }
+  
+    .leftPane {
+      width: 100%;
+      border-right: none;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    }
+  
+    .rightPane {
+      padding: 24px 18px 22px;
+    }
+  
+    .grid,
+    .inlineRow {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  
+    .stepList {
+      flex-direction: row;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+  
+    .stepItem {
+      min-width: 180px;
+    }
+  }
+  .riskQuestionBlock {
+    margin-bottom: 20px;
+  }
+  
+  .riskQuestionTitle {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  
+  .riskOptionsRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .riskOptionPill {
+    border-radius: 999px;
+    padding: 8px 14px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+  }
+  
+  .riskOptionPill input {
+    display: none;
+  }
+  
+  .riskOptionPillSelected {
+    background-color: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+  }
+  
+  .formError {
+    margin-top: 16px;
+    font-size: 13px;
+    color: #b91c1c;
+  }
+  .stepItem {
+    cursor: pointer;
+  }
+  

@@ -1,95 +1,139 @@
 // pages/buckets.js
 import Link from "next/link";
-import { useEffect, useState, useMemo } from "react";
-import { auth } from "../lib/firebase";
-import { usePlan } from "../lib/usePlan";
+import { useEffect, useState, useCallback } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
-const PLAN_LIMIT = { none: 0, standard: 5, pro: 8, max: 10 };
 
-export default function Buckets({ user }) {
+export default function Buckets({ user, loading }) {
   const [buckets, setBuckets] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const { plan } = usePlan(user);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
+  const fetchBuckets = useCallback(
+    async (opts = { isRefresh: false }) => {
+      if (!user) return;
+
       try {
-        if (!user) { setLoading(false); return; }
-        const token = await auth.currentUser.getIdToken();
+        if (!opts.isRefresh) {
+          setIsLoading(true);
+        } else {
+          setIsRefreshing(true);
+        }
+        setErr("");
+
+        const token = await user.getIdToken();
+        console.log("DEBUG API_BASE =", API_BASE);
         const res = await fetch(`${API_BASE}/buckets`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) throw new Error(`API ${res.status}`);
+
+        if (!res.ok) {
+          throw new Error(`API ${res.status}`);
+        }
+
         const data = await res.json();
+        const rawBuckets = Array.isArray(data.buckets) ? data.buckets : [];
 
-        // normalize & add an index rank (1..N) for gating
-        const safe = (data.buckets ?? []).map((b, idx) => ({
+        const normalized = rawBuckets.map((b, idx) => ({
           ...b,
-          id: b.id ?? b.bucketId ?? b.name ?? `bucket-${idx + 1}`,
-          name: b.name ?? b.title ?? `Bucket ${idx + 1}`,
-          items: Array.isArray(b.items) ? b.items : (Array.isArray(b.legs) ? b.legs : []),
-          rank: idx + 1,
+          id: b.id || b.bucketId || `bucket-${idx + 1}`,
+          name: b.name || b.title || `Bucket ${idx + 1}`,
+          items: Array.isArray(b.items)
+            ? b.items
+            : Array.isArray(b.legs)
+            ? b.legs
+            : [],
+          livePrice:
+            typeof b.livePrice === "number" ? b.livePrice : null,
         }));
-        if (alive) setBuckets(safe);
+
+        setBuckets(normalized);
       } catch (e) {
-        if (alive) setErr(String(e));
+        console.error("Error loading buckets", e);
+        setErr(String(e));
       } finally {
-        if (alive) setLoading(false);
+        setIsLoading(false);
+        setIsRefreshing(false);
       }
-    })();
-    return () => { alive = false; };
-  }, [user]);
+    },
+    [user]
+  );
 
-  const limit = PLAN_LIMIT[plan] ?? 0;
-  const unlockedCount = useMemo(() => Math.min(limit, buckets.length), [limit, buckets]);
+  useEffect(() => {
+    if (loading) return;
+    if (!user) return;
+    fetchBuckets({ isRefresh: false });
+  }, [user, loading, fetchBuckets]);
 
-  if (!user) return <p>Please sign in.</p>;
-  if (loading) return <p>Loading buckets…</p>;
-  if (err) return <p style={{ color: "tomato" }}>Failed to fetch: {err}</p>;
+  const reloadBuckets = () => {
+    if (!user) return;
+    fetchBuckets({ isRefresh: true });
+  };
+
+  if (loading) {
+    return <p>Loading...</p>;
+  }
+
+  if (!user) {
+    return <p>Please sign in to view buckets.</p>;
+  }
 
   return (
-    <div className="container">
+    <div className="page">
       <div className="page-head">
         <h1>Buckets</h1>
-        <span className="badge">
-          Unlocked {unlockedCount}/{buckets.length}
-        </span>
+
+        <button
+          className="btn ghost"
+          onClick={reloadBuckets}
+          disabled={isRefreshing}
+        >
+          {isRefreshing ? "Refreshing…" : "Refresh prices"}
+        </button>
       </div>
 
+      {err && <p className="error">Failed to fetch: {err}</p>}
+
       <div className="grid">
-        {buckets.map((b) => {
-          const locked = b.rank > limit;
-          return (
-            <div className={`card ${locked ? "locked" : ""}`} key={b.id}>
-              <div className="card-head">
-                <h3 className="card-title">{b.name}</h3>
-                <span className={`chip ${locked ? "chip-locked" : "chip-ok"}`}>
-                  {locked ? "Locked" : "Unlocked"}
-                </span>
-              </div>
+        {buckets.map((b) => (
+          <div key={b.id} className="card">
+            <h2>{b.name}</h2>
 
-              <p className="muted">
-                {(b.items ?? []).map(i => i.symbol).join(", ")}
+            <p className="muted">
+              {b.description ||
+                "AI-curated basket of instruments tailored to a specific theme."}
+            </p>
+
+            <p className="muted small">
+              {Array.isArray(b.items) && b.items.length > 0
+                ? `${b.items.length} instruments`
+                : "No instruments configured yet"}
+            </p>
+
+            <p className="price">
+              {b.livePrice != null
+                ? <>Approx. value: ₹{b.livePrice.toFixed(2)}</>
+                : "Price unavailable"}
+            </p>
+
+            {b.priceError && (
+              <p className="error small">
+                Could not fetch live price. Connect Zerodha and try again.
               </p>
+            )}
 
-              <div className="card-actions">
-                {locked ? (
-                  <>
-                    <span className="lock">🔒</span>
-                    <Link className="btn ghost" href="/plans">Upgrade</Link>
-                  </>
-                ) : (
-                  <Link className="btn" href={`/bucket/${b.id}`}>Open</Link>
-                )}
-              </div>
-
-              {locked && <div className="lock-overlay" aria-hidden="true" />}
+            <div className="card-actions">
+              <Link className="btn" href={`/bucket/${b.id}`}>
+                View &amp; Buy
+              </Link>
             </div>
-          );
-        })}
+          </div>
+        ))}
+
+        {!isLoading && buckets.length === 0 && !err && (
+          <p>No buckets configured yet.</p>
+        )}
       </div>
     </div>
   );
