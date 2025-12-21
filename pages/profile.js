@@ -18,12 +18,6 @@ const INFO_TABS = [
 // If some key names differ, just tweak the key values.
 const CASH_FLOW_FIELDS = [
   { key: "rent", label: "Rent" },
-  { key: "homeEmi1", label: "Home EMI 1" },
-  { key: "homeEmi2", label: "Home EMI 2" },
-  { key: "personalLoanEmi", label: "Personal Loan EMI" },
-  { key: "creditCardEmi", label: "Credit Card EMI" },
-  { key: "vehicleLoanEmi", label: "Vehicle Loan EMI" },
-  { key: "otherEmi", label: "Other EMI" },
   { key: "maintainence", label: "Maintainence" },
   { key: "groceries", label: "Groceries" },
   { key: "utilities", label: "Utilities" },
@@ -36,7 +30,8 @@ const CASH_FLOW_FIELDS = [
   { key: "parentsExpense", label: "Parents Expense" },
   { key: "miscExpense", label: "Misc Expense" },
   { key: "others", label: "Others" },
-  { key: "totalMonthlyExpense", label: "Total Monthly Expense" },
+  { key: "annualLargeExpenses", label: "Annual Large Expenses (yearly)" },
+  { key: "totalMonthlyExpense", label: "Total Monthly Expense (excluding EMIs)" },
 ];
 
 const ASSET_FIELDS = [
@@ -68,6 +63,21 @@ const ASSET_FIELDS = [
   { key: "totalAsset", label: "Total Asset" },
 ];
 
+const CONTRIBUTION_FIELDS = [
+  { key: "sipEquityMfMonthly", label: "Equity MF SIP (per month)" },
+  { key: "sipDebtMfMonthly", label: "Debt MF SIP (per month)" },
+  { key: "sipDirectEquityMonthly", label: "Direct Stocks SIP (per month)" },
+  { key: "ppfMonthly", label: "PPF (per month)" },
+  { key: "npsMonthly", label: "NPS (per month)" },
+  { key: "epfMonthly", label: "EPF (per month)" },
+  { key: "otherInvestMonthly", label: "Other Investments (per month)" },
+];
+
+const EMERGENCY_FIELDS = [
+  { key: "monthsTarget", label: "Target Months of Expenses" },
+  { key: "dedicatedAmount", label: "Dedicated Emergency Amount" },
+];
+
 const LIABILITY_FIELDS = [
   { key: "houseLoan1", label: "House Loan 1" },
   { key: "houseLoan2", label: "House Loan 2" },
@@ -93,6 +103,16 @@ const INSURANCE_FIELDS = [
   { key: "otherPolicy", label: "Other Policy" },
 ];
 
+const INSURANCE_PREMIUM_FIELDS = INSURANCE_FIELDS.map((field) => ({
+  key: `${field.key}PremiumPerYear`,
+  label: `${field.label} Premium per year`,
+}));
+
+const INSURANCE_FIELDS_EXTENDED = [
+  ...INSURANCE_FIELDS,
+  ...INSURANCE_PREMIUM_FIELDS,
+];
+
 const GOAL_FIELDS = [
   { key: "child1UnderGraduateEducation", label: "Child 1 UG Education" },
   { key: "child2UnderGraduateEducation", label: "Child 2 UG Education" },
@@ -109,6 +129,17 @@ const GOAL_FIELDS = [
   { key: "others", label: "Others" },
   { key: "totalGoalValue", label: "Total Goal Value" },
 ];
+
+const GOAL_FIELDS_EXTENDED = GOAL_FIELDS.flatMap((field) => {
+  if (field.key === "totalGoalValue") {
+    return [field];
+  }
+  return [
+    field,
+    { key: `${field.key}HorizonYears`, label: `${field.label} Horizon (years)` },
+    { key: `${field.key}Priority`, label: `${field.label} Priority` },
+  ];
+});
 
 const PROFESSION_LABELS = {
     salaried: "Salaried",
@@ -183,7 +214,9 @@ export default function ProfilePage() {
 
     async function refreshPlanShared() {
       try {
-        const token = await user.getIdToken();
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+        const token = await currentUser.getIdToken();
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/plans/shared/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -286,6 +319,17 @@ export default function ProfilePage() {
     </div>
 
     <div className={styles.fieldRow}>
+      <div className={styles.label}>Retirement age</div>
+      <div className={styles.value}>{personal.retirementAge || "ƒ?"}</div>
+    </div>
+
+    <div className={styles.fieldRow}>
+      <div className={styles.label}>Dependents count</div>
+      <div className={styles.value}>{personal.dependentsCount || "ƒ?"}</div>
+    </div>
+
+
+    <div className={styles.fieldRow}>
       <div className={styles.label}>City</div>
       <div className={styles.value}>{personal.city || "—"}</div>
     </div>
@@ -307,6 +351,12 @@ export default function ProfilePage() {
         </div>
       </div>
     )}
+
+    <div className={styles.fieldRow}>
+      <div className={styles.label}>Risk tolerance (self)</div>
+      <div className={styles.value}>{personal.riskToleranceSelf || "ƒ?"}</div>
+    </div>
+
 
     <div className={styles.fieldRow}>
       <div className={styles.label}>Tax regime</div>
@@ -360,6 +410,39 @@ export default function ProfilePage() {
   </div>
 </section>
 
+<section className={styles.section}>
+  <h3 className={styles.sectionTitle}>Emergency fund</h3>
+  <div className={styles.grid}>
+    {EMERGENCY_FIELDS.map((f) => (
+      <div key={f.key} className={styles.fieldRow}>
+        <div className={styles.label}>{f.label}</div>
+        <div className={styles.value}>
+          {profile.emergency && String(profile.emergency[f.key] ?? "") !== ""
+            ? profile.emergency[f.key]
+            : "ƒ?"}
+        </div>
+      </div>
+    ))}
+  </div>
+</section>
+
+<section className={styles.section}>
+  <h3 className={styles.sectionTitle}>Monthly contributions</h3>
+  <div className={styles.grid}>
+    {CONTRIBUTION_FIELDS.map((f) => (
+      <div key={f.key} className={styles.fieldRow}>
+        <div className={styles.label}>{f.label}</div>
+        <div className={styles.value}>
+          {profile.contributions && String(profile.contributions[f.key] ?? "") !== ""
+            ? profile.contributions[f.key]
+            : "ƒ?"}
+        </div>
+      </div>
+    ))}
+  </div>
+</section>
+
+
         </>
       );
     }
@@ -398,7 +481,7 @@ export default function ProfilePage() {
       return (
         <SectionGrid
           title="Insurance coverage"
-          fields={INSURANCE_FIELDS}
+          fields={INSURANCE_FIELDS_EXTENDED}
           values={profile.insurance || {}}
         />
       );
@@ -408,7 +491,7 @@ export default function ProfilePage() {
       return (
         <SectionGrid
           title="Financial goals"
-          fields={GOAL_FIELDS}
+          fields={GOAL_FIELDS_EXTENDED}
           values={profile.goals || {}}
         />
       );
@@ -426,7 +509,7 @@ export default function ProfilePage() {
             </p>
           </section>
         );
-      }  
+    }
 
     return null;
   };

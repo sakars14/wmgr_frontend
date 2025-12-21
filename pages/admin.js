@@ -151,6 +151,82 @@ function PlanViewer({ plan }) {
   );
 }
 
+function NarrationViewer({ narration }) {
+  if (!narration) return null;
+
+  const planSummary = narration.planSummary || {};
+
+  return (
+    <div style={{ marginTop: 14, padding: 14, border: "1px solid #e8edf5", borderRadius: 12, background: "#fff" }}>
+      <div style={{ fontWeight: 800, marginBottom: 8 }}>Narration</div>
+
+      <KVTable
+        title="Narration summary"
+        rows={[
+          ["One-liner", planSummary.oneLiner || "-"],
+          ["Risk band", planSummary.riskBand || "-"],
+          ["Health label", planSummary.healthScoreLabel || "-"],
+        ]}
+      />
+
+      {!!(narration.sections || []).length && (
+        <>
+          <div style={{ fontWeight: 800, marginTop: 10, marginBottom: 6 }}>Sections</div>
+          {narration.sections.map((section, idx) => (
+            <div key={`${section.title}-${idx}`} style={{ marginBottom: 10 }}>
+              <div style={{ fontWeight: 700 }}>{section.title}</div>
+              <div style={{ whiteSpace: "pre-wrap", color: "#4b5563" }}>{section.markdown}</div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {!!(narration.actionChecklist || []).length && (
+        <>
+          <div style={{ fontWeight: 800, marginTop: 10, marginBottom: 6 }}>Action checklist</div>
+          <ul style={{ marginTop: 6 }}>
+            {narration.actionChecklist.map((item) => (
+              <li key={item.id} style={{ marginBottom: 8 }}>
+                <div style={{ fontWeight: 700 }}>
+                  {item.title} <span style={{ fontWeight: 600, color: "#374151" }}>({item.priority})</span>
+                </div>
+                <div style={{ color: "#4b5563" }}>{item.why}</div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {!!(narration.clarifyingQuestions || []).length && (
+        <>
+          <div style={{ fontWeight: 800, marginTop: 10, marginBottom: 6 }}>Missing info to confirm</div>
+          <ul style={{ marginTop: 6 }}>
+            {narration.clarifyingQuestions.map((item) => (
+              <li key={item.id} style={{ marginBottom: 8 }}>
+                <div style={{ fontWeight: 700 }}>{item.question}</div>
+                <div style={{ color: "#4b5563" }}>{item.whyItMatters}</div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {!!(narration.disclosures || []).length && (
+        <>
+          <div style={{ fontWeight: 800, marginTop: 10, marginBottom: 6 }}>Disclosures</div>
+          <ul style={{ marginTop: 6 }}>
+            {narration.disclosures.map((item, idx) => (
+              <li key={`${item}-${idx}`} style={{ marginBottom: 6 }}>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
   const [metrics, setMetrics] = useState(null);
   const [error, setError] = useState("");
@@ -160,6 +236,9 @@ export default function Admin() {
   const [manualPlan, setManualPlan] = useState(null);
   const [manualLoading, setManualLoading] = useState(false);
   const [manualMsg, setManualMsg] = useState("");
+  const [manualNarration, setManualNarration] = useState(null);
+  const [manualNarrationLoading, setManualNarrationLoading] = useState(false);
+  const [manualNarrationMsg, setManualNarrationMsg] = useState("");
 
   // All plans
   const [allPlans, setAllPlans] = useState([]);
@@ -204,6 +283,7 @@ export default function Admin() {
     setManualLoading(true);
     setManualMsg("");
     setManualPlan(null);
+    setManualNarration(null);
     try {
       const token = await getToken();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/plans/recommendations`, {
@@ -222,6 +302,31 @@ export default function Admin() {
       setManualMsg(`❌ ${String(e)}`);
     } finally {
       setManualLoading(false);
+    }
+  }
+
+  async function runNarration() {
+    setManualNarrationLoading(true);
+    setManualNarrationMsg("");
+    setManualNarration(null);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/plans/narration`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(clientId ? { clientId } : {}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.detail || JSON.stringify(data));
+      setManualNarration(data);
+      setManualNarrationMsg("Narration generated (and saved in clientPlans)");
+    } catch (e) {
+      setManualNarrationMsg(`Error: ${String(e)}`);
+    } finally {
+      setManualNarrationLoading(false);
     }
   }
 
@@ -347,11 +452,27 @@ export default function Admin() {
             >
               {manualLoading ? "Running…" : "Run /plans/recommendations"}
             </button>
+            <button
+              onClick={runNarration}
+              disabled={manualNarrationLoading}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid #0f766e",
+                background: "#0f766e",
+                color: "#fff",
+                opacity: manualNarrationLoading ? 0.7 : 1,
+              }}
+            >
+              {manualNarrationLoading ? "Generating…" : "Generate Narration"}
+            </button>
           </div>
 
           {manualMsg && <div style={{ marginTop: 10, color: "#111827" }}>{manualMsg}</div>}
+          {manualNarrationMsg && <div style={{ marginTop: 10, color: "#111827" }}>{manualNarrationMsg}</div>}
 
           <PlanViewer plan={manualPlan} />
+          <NarrationViewer narration={manualNarration} />
         </div>
 
         {/* SECTION 2: All plans */}

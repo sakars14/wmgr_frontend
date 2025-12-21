@@ -18,10 +18,18 @@ const STEPS = [
   { key: "cashFlow",    label: "Cash flow" },
   { key: "assets",      label: "Assets" },
   { key: "liabilities", label: "Liabilities" },
+  { key: "emergency",   label: "Emergency" },
   { key: "insurance",   label: "Insurance" },
   { key: "goals",       label: "Goals" },
   { key: "risk",        label: "Risk assessment" }, // NEW
 ];
+
+const STEP_INDEX_BY_KEY = STEPS.reduce((acc, step, index) => {
+  acc[step.key] = index;
+  return acc;
+}, {});
+
+const stepIndex = (key) => STEP_INDEX_BY_KEY[key] ?? 0;
 
 
 const PROFESSION_OPTIONS = [
@@ -36,6 +44,29 @@ const PROFESSION_OPTIONS = [
 const TAX_REGIME_OPTIONS = [
   { value: "old", label: "Old regime" },
   { value: "new", label: "New regime" },
+];
+
+const RISK_TOLERANCE_OPTIONS = [
+  { value: "", label: "Select your risk tolerance" },
+  { value: "Low", label: "Low" },
+  { value: "Moderate", label: "Moderate" },
+  { value: "High", label: "High" },
+];
+
+const RETIREMENT_AGE_OPTIONS = [
+  { value: "", label: "Select retirement age" },
+  ...Array.from({ length: 21 }, (_, idx) => {
+    const value = String(50 + idx);
+    return { value, label: value };
+  }),
+];
+
+const EMERGENCY_MONTH_OPTIONS = [
+  { value: "", label: "Select months" },
+  { value: "3", label: "3 months" },
+  { value: "6", label: "6 months" },
+  { value: "9", label: "9 months" },
+  { value: "12", label: "12 months" },
 ];
 
 // You can tweak these slabs to match the latest rules
@@ -60,12 +91,6 @@ const TAX_SLABS_BY_REGIME = {
 
 const CASH_FLOW_FIELDS = [
   { key: "rent", label: "Rent" },
-  { key: "homeEmi1", label: "Home EMI 1" },
-  { key: "homeEmi2", label: "Home EMI 2" },
-  { key: "personalLoanEmi", label: "Personal Loan EMI" },
-  { key: "creditCardEmi", label: "Credit card EMI" },
-  { key: "vehicleLoanEmi", label: "Vehicle Loan EMI" },
-  { key: "otherEmi", label: "Other EMI" },
   { key: "maintainence", label: "Maintainence" },
   { key: "groceries", label: "Groceries" },
   { key: "utilities", label: "Utilities" },
@@ -78,7 +103,8 @@ const CASH_FLOW_FIELDS = [
   { key: "parentsExpense", label: "Parents expense" },
   { key: "miscExpense", label: "Misc expense" },
   { key: "others", label: "Others" },
-  { key: "totalMonthlyExpense", label: "Total Monthly Expense" },
+  { key: "annualLargeExpenses", label: "Annual Large Expenses (yearly)" },
+  { key: "totalMonthlyExpense", label: "Total Monthly Expense (excluding EMIs)" },
 ];
 
 const ASSET_FIELDS = [
@@ -110,6 +136,16 @@ const ASSET_FIELDS = [
   { key: "totalAsset", label: "Total Asset" },
 ];
 
+const CONTRIBUTION_FIELDS = [
+  { key: "sipEquityMfMonthly", label: "Equity MF SIP (per month)" },
+  { key: "sipDebtMfMonthly", label: "Debt MF SIP (per month)" },
+  { key: "sipDirectEquityMonthly", label: "Direct Stocks SIP (per month)" },
+  { key: "ppfMonthly", label: "PPF (per month)" },
+  { key: "npsMonthly", label: "NPS (per month)" },
+  { key: "epfMonthly", label: "EPF (per month)" },
+  { key: "otherInvestMonthly", label: "Other Investments (per month)" },
+];
+
 const LIABILITY_FIELDS = [
   { key: "houseLoan1", label: "House Loan1" },
   { key: "houseLoan2", label: "House Loan2" },
@@ -122,6 +158,99 @@ const LIABILITY_FIELDS = [
   { key: "others", label: "Others" },
   { key: "totalOutstanding", label: "Total Outstanding" },
 ];
+
+const LIABILITY_LOAN_FIELDS = [
+  {
+    amountKey: "houseLoan1",
+    label: "House Loan 1",
+    emiKey: "houseLoan1Emi",
+    remainingMonthsKey: "houseLoan1RemainingMonths",
+  },
+  {
+    amountKey: "houseLoan2",
+    label: "House Loan 2",
+    emiKey: "houseLoan2Emi",
+    remainingMonthsKey: "houseLoan2RemainingMonths",
+  },
+  {
+    amountKey: "loanAgainstShares",
+    label: "Loan Against Shares",
+    emiKey: "loanAgainstSharesEmi",
+    remainingMonthsKey: "loanAgainstSharesRemainingMonths",
+  },
+  {
+    amountKey: "personalLoan1",
+    label: "Personal Loan 1",
+    emiKey: "personalLoan1Emi",
+    remainingMonthsKey: "personalLoan1RemainingMonths",
+  },
+  {
+    amountKey: "personalLoan2",
+    label: "Personal Loan 2",
+    emiKey: "personalLoan2Emi",
+    remainingMonthsKey: "personalLoan2RemainingMonths",
+  },
+  {
+    amountKey: "creditCard1",
+    label: "Credit Card 1",
+    emiKey: "creditCard1Emi",
+    remainingMonthsKey: "creditCard1RemainingMonths",
+    remainingOptional: true,
+  },
+  {
+    amountKey: "creditCard2",
+    label: "Credit Card 2",
+    emiKey: "creditCard2Emi",
+    remainingMonthsKey: "creditCard2RemainingMonths",
+    remainingOptional: true,
+  },
+  {
+    amountKey: "vehicleLoan",
+    label: "Vehicle Loan",
+    emiKey: "vehicleLoanEmi",
+    remainingMonthsKey: "vehicleLoanRemainingMonths",
+  },
+  {
+    amountKey: "others",
+    label: "Other Loan",
+    emiKey: "othersEmi",
+    remainingMonthsKey: "othersRemainingMonths",
+  },
+];
+
+const REMAINING_MONTH_OPTIONS = [
+  { value: "", label: "Select months" },
+  ...Array.from({ length: 360 }, (_, idx) => {
+    const value = String(idx + 1);
+    return {
+      value,
+      label: `${value} month${idx + 1 === 1 ? "" : "s"}`,
+    };
+  }),
+];
+
+const LIABILITY_EMI_FIELDS = LIABILITY_LOAN_FIELDS.map((loan) => ({
+  key: loan.emiKey,
+}));
+const LIABILITY_REMAINING_FIELDS = LIABILITY_LOAN_FIELDS.map((loan) => ({
+  key: loan.remainingMonthsKey,
+}));
+
+const LEGACY_CASHFLOW_EMI_MAP = [
+  { cashFlowKey: "homeEmi1", liabilityKey: "houseLoan1Emi" },
+  { cashFlowKey: "homeEmi2", liabilityKey: "houseLoan2Emi" },
+  { cashFlowKey: "personalLoanEmi", liabilityKey: "personalLoan1Emi" },
+  { cashFlowKey: "creditCardEmi", liabilityKey: "creditCard1Emi" },
+  { cashFlowKey: "vehicleLoanEmi", liabilityKey: "vehicleLoanEmi" },
+  { cashFlowKey: "otherEmi", liabilityKey: "othersEmi" },
+];
+
+const LIABILITY_FIELDS_ALL = [
+  ...LIABILITY_FIELDS,
+  ...LIABILITY_EMI_FIELDS,
+  ...LIABILITY_REMAINING_FIELDS,
+];
+
 
 const INSURANCE_FIELDS = [
   { key: "termPolicyClient", label: "Term Policy - Client" },
@@ -153,6 +282,16 @@ const INSURANCE_FIELDS = [
   { key: "otherPolicy", label: "Other Policy" },
 ];
 
+const INSURANCE_ENTRIES = INSURANCE_FIELDS.map((field) => ({
+  key: field.key,
+  label: field.label,
+  premiumKey: `${field.key}PremiumPerYear`,
+}));
+
+const INSURANCE_PREMIUM_FIELDS = INSURANCE_ENTRIES.map((entry) => ({
+  key: entry.premiumKey,
+}));
+
 const GOAL_FIELDS = [
   {
     key: "child1UnderGraduateEducation",
@@ -182,6 +321,46 @@ const GOAL_FIELDS = [
   { key: "totalGoalValue", label: "Total Goal Value" },
 ];
 
+const GOAL_ENTRIES = GOAL_FIELDS.map((field) => ({
+  key: field.key,
+  label: field.label,
+  horizonKey: `${field.key}HorizonYears`,
+  priorityKey: `${field.key}Priority`,
+}));
+
+const GOAL_META_FIELDS = GOAL_ENTRIES.flatMap((entry) => {
+  if (entry.key === "totalGoalValue") return [];
+  return [{ key: entry.horizonKey }, { key: entry.priorityKey }];
+});
+
+const INSURANCE_FIELDS_ALL = [
+  ...INSURANCE_FIELDS,
+  ...INSURANCE_PREMIUM_FIELDS,
+];
+
+const GOAL_FIELDS_ALL = [
+  ...GOAL_FIELDS,
+  ...GOAL_META_FIELDS,
+];
+
+const GOAL_HORIZON_OPTIONS = [
+  { value: "", label: "Select years" },
+  ...Array.from({ length: 40 }, (_, idx) => {
+    const value = String(idx + 1);
+    return {
+      value,
+      label: `${value} year${idx + 1 === 1 ? "" : "s"}`,
+    };
+  }),
+];
+
+const GOAL_PRIORITY_OPTIONS = [
+  { value: "", label: "Select priority" },
+  { value: "High", label: "High" },
+  { value: "Medium", label: "Medium" },
+  { value: "Low", label: "Low" },
+];
+
 // helper to init numeric sections
 function makeEmptyFromFields(fields) {
   const obj = {};
@@ -189,6 +368,21 @@ function makeEmptyFromFields(fields) {
     obj[f.key] = "";
   });
   return obj;
+}
+
+function isBlank(value) {
+  return value === null || value === undefined || String(value).trim() === "";
+}
+
+function buildSectionFromFields(fields, source) {
+  const base = makeEmptyFromFields(fields);
+  if (!source) return base;
+  fields.forEach((f) => {
+    if (source[f.key] !== undefined) {
+      base[f.key] = source[f.key];
+    }
+  });
+  return base;
 }
 
 // --- Small reusable components -------------------------------------
@@ -240,6 +434,9 @@ export default function Onboarding() {
   const [personal, setPersonal] = useState({
     name: "",
     age: "",
+    retirementAge: "",
+    dependentsCount: "",
+    riskToleranceSelf: "",
     city: "",
     professionType: "",
     professionOther: "",
@@ -259,13 +456,20 @@ export default function Onboarding() {
     makeEmptyFromFields(ASSET_FIELDS)
   );
   const [liabilities, setLiabilities] = useState(() =>
-    makeEmptyFromFields(LIABILITY_FIELDS)
+    makeEmptyFromFields(LIABILITY_FIELDS_ALL)
+  );
+  const [emergency, setEmergency] = useState({
+    monthsTarget: "",
+    dedicatedAmount: "",
+  });
+  const [contributions, setContributions] = useState(() =>
+    makeEmptyFromFields(CONTRIBUTION_FIELDS)
   );
   const [insurance, setInsurance] = useState(() =>
-    makeEmptyFromFields(INSURANCE_FIELDS)
+    makeEmptyFromFields(INSURANCE_FIELDS_ALL)
   );
   const [goals, setGoals] = useState(() =>
-    makeEmptyFromFields(GOAL_FIELDS)
+    makeEmptyFromFields(GOAL_FIELDS_ALL)
   );
   const [isExistingProfile, setIsExistingProfile] = useState(false);
 
@@ -290,6 +494,7 @@ export default function Onboarding() {
   
       try {
         const profileRef = doc(db, "clientProfiles", user.uid);
+
         const snapshot = await getDoc(profileRef);
   
         if (editMode) {
@@ -298,30 +503,47 @@ export default function Onboarding() {
             const data = snapshot.data() || {};
             setIsExistingProfile(true);
   
+            const personalData = data.personal || {};
+            const cashFlowData = data.cashFlow || {};
+            const assetsData = data.assets || {};
+            const liabilitiesData = data.liabilities || {};
+            const insuranceData = data.insurance || {};
+            const goalsData = data.goals || {};
+            const emergencyData = data.emergency || {};
+            const contributionsData = data.contributions || {};
+
             setPersonal((prev) => ({
               ...prev,
-              ...(data.personal || {}),
+              ...personalData,
             }));
-            setCashFlow((prev) => ({
+            setCashFlow(buildSectionFromFields(CASH_FLOW_FIELDS, cashFlowData));
+            setAssets(buildSectionFromFields(ASSET_FIELDS, assetsData));
+
+            const baseLiabilities = {
+              ...makeEmptyFromFields(LIABILITY_FIELDS_ALL),
+              ...liabilitiesData,
+            };
+            const migratedEmi = {};
+            LEGACY_CASHFLOW_EMI_MAP.forEach((mapping) => {
+              if (
+                isBlank(baseLiabilities[mapping.liabilityKey]) &&
+                !isBlank(cashFlowData[mapping.cashFlowKey])
+              ) {
+                migratedEmi[mapping.liabilityKey] = cashFlowData[mapping.cashFlowKey];
+              }
+            });
+            setLiabilities({
+              ...baseLiabilities,
+              ...migratedEmi,
+            });
+
+            setInsurance(buildSectionFromFields(INSURANCE_FIELDS_ALL, insuranceData));
+            setGoals(buildSectionFromFields(GOAL_FIELDS_ALL, goalsData));
+            setEmergency((prev) => ({
               ...prev,
-              ...(data.cashFlow || {}),
+              ...emergencyData,
             }));
-            setAssets((prev) => ({
-              ...prev,
-              ...(data.assets || {}),
-            }));
-            setLiabilities((prev) => ({
-              ...prev,
-              ...(data.liabilities || {}),
-            }));
-            setInsurance((prev) => ({
-              ...prev,
-              ...(data.insurance || {}),
-            }));
-            setGoals((prev) => ({
-              ...prev,
-              ...(data.goals || {}),
-            }));
+            setContributions(buildSectionFromFields(CONTRIBUTION_FIELDS, contributionsData));
                         // Restore saved risk answers (if any) into the radio state
                         if (data.riskQuiz && data.riskQuiz.answers) {
                           const ans = data.riskQuiz.answers;
@@ -413,6 +635,14 @@ export default function Onboarding() {
     setLiabilities((prev) => ({ ...prev, [key]: value }));
   };
 
+  const updateEmergency = (key, value) => {
+    setEmergency((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const updateContributions = (key, value) => {
+    setContributions((prev) => ({ ...prev, [key]: value }));
+  };
+
   const updateInsurance = (key, value) => {
     setInsurance((prev) => ({ ...prev, [key]: value }));
   };
@@ -464,11 +694,12 @@ export default function Onboarding() {
     return true;
   };
   
-  const isBlank = (v) => v === null || v === undefined || String(v).trim() === "";
-
   const REQUIRED_PERSONAL_KEYS = [
     "name",
     "age",
+    "retirementAge",
+    "dependentsCount",
+    "riskToleranceSelf",
     "city",
     "professionType",
     "monthlyIncomeInHand",
@@ -477,6 +708,7 @@ export default function Onboarding() {
   ];
 
   const REQUIRED_CASHFLOW_KEYS = ["totalMonthlyExpense"];
+  const REQUIRED_EMERGENCY_KEYS = ["monthsTarget"];
   const REQUIRED_GOALS_KEYS = ["totalGoalValue"];
 
   const validateMandatoryFields = () => {
@@ -484,14 +716,14 @@ export default function Onboarding() {
     for (const k of REQUIRED_PERSONAL_KEYS) {
       if (isBlank(personal[k])) {
         setError(`Please fill required field: ${k} (Personal details)`);
-        setCurrentStep(0);
+        setCurrentStep(stepIndex("personal"));
         return false;
       }
     }
 
     if (personal.professionType === "other" && isBlank(personal.professionOther)) {
       setError("Please fill required field: professionOther (Personal details)");
-      setCurrentStep(0);
+      setCurrentStep(stepIndex("personal"));
       return false;
     }
 
@@ -499,7 +731,39 @@ export default function Onboarding() {
     for (const k of REQUIRED_CASHFLOW_KEYS) {
       if (isBlank(cashFlow[k])) {
         setError(`Please fill required field: ${k} (Cash flow)`);
-        setCurrentStep(1);
+        setCurrentStep(stepIndex("cashFlow"));
+        return false;
+      }
+    }
+
+    const requireLoanFields = (loan) => {
+      const amt = parseFloat(liabilities[loan.amountKey] || "0");
+      if (amt > 0 && isBlank(liabilities[loan.emiKey])) {
+        setError(`Please fill EMI for ${loan.label} (Liabilities tab).`);
+        setCurrentStep(stepIndex("liabilities"));
+        return false;
+      }
+      if (
+        amt > 0 &&
+        !loan.remainingOptional &&
+        isBlank(liabilities[loan.remainingMonthsKey])
+      ) {
+        setError(`Please select remaining months for ${loan.label} (Liabilities tab).`);
+        setCurrentStep(stepIndex("liabilities"));
+        return false;
+      }
+      return true;
+    };
+
+    for (const loan of LIABILITY_LOAN_FIELDS) {
+      if (!requireLoanFields(loan)) return false;
+    }
+
+    // Emergency
+    for (const k of REQUIRED_EMERGENCY_KEYS) {
+      if (isBlank(emergency[k])) {
+        setError(`Please fill required field: ${k} (Emergency)`);
+        setCurrentStep(stepIndex("emergency"));
         return false;
       }
     }
@@ -508,7 +772,7 @@ export default function Onboarding() {
     for (const k of REQUIRED_GOALS_KEYS) {
       if (isBlank(goals[k])) {
         setError(`Please fill required field: ${k} (Goals)`);
-        setCurrentStep(5);
+        setCurrentStep(stepIndex("goals"));
         return false;
       }
     }
@@ -517,8 +781,23 @@ export default function Onboarding() {
     const anyGoal = goalKeys.some((k) => parseFloat(goals[k] || "0") > 0);
     if (!anyGoal) {
       setError("Please enter at least one goal amount (Goals tab).");
-      setCurrentStep(5);
+      setCurrentStep(stepIndex("goals"));
       return false;
+    }
+
+    for (const entry of GOAL_ENTRIES) {
+      if (entry.key === "totalGoalValue") continue;
+      const amount = parseFloat(goals[entry.key] || "0");
+      if (amount > 0 && isBlank(goals[entry.horizonKey])) {
+        setError(`Please select horizon (years) for ${entry.label} (Goals tab).`);
+        setCurrentStep(stepIndex("goals"));
+        return false;
+      }
+      if (amount > 0 && isBlank(goals[entry.priorityKey])) {
+        setError(`Please select priority for ${entry.label} (Goals tab).`);
+        setCurrentStep(stepIndex("goals"));
+        return false;
+      }
     }
 
     return true;
@@ -552,13 +831,43 @@ export default function Onboarding() {
 
       const profileRef = doc(db, "clientProfiles", user.uid);
 
+      const normalizedCashFlow = buildSectionFromFields(CASH_FLOW_FIELDS, cashFlow);
+      if (isBlank(normalizedCashFlow.annualLargeExpenses)) {
+        normalizedCashFlow.annualLargeExpenses = 0;
+      }
+
+      const normalizedAssets = buildSectionFromFields(ASSET_FIELDS, assets);
+      const normalizedLiabilities = buildSectionFromFields(LIABILITY_FIELDS_ALL, liabilities);
+      const normalizedInsurance = buildSectionFromFields(INSURANCE_FIELDS_ALL, insurance);
+      const normalizedGoals = buildSectionFromFields(GOAL_FIELDS_ALL, goals);
+      const normalizedEmergency = {
+        monthsTarget: emergency.monthsTarget ?? "",
+        dedicatedAmount: emergency.dedicatedAmount ?? "",
+      };
+
+      const normalizedContributions = {};
+      CONTRIBUTION_FIELDS.forEach((field) => {
+        const raw = contributions[field.key];
+        if (isBlank(raw)) {
+          normalizedContributions[field.key] = 0;
+        } else {
+          const num = parseFloat(raw);
+          normalizedContributions[field.key] = Number.isNaN(num) ? 0 : num;
+        }
+      });
+
+
       const payload = {
         personal,
-        cashFlow,
-        assets,
-        liabilities,
-        insurance,
-        goals,
+        cashFlow: normalizedCashFlow,
+        assets: normalizedAssets,
+        liabilities: normalizedLiabilities,
+        emergency: normalizedEmergency,
+        contributions: normalizedContributions,
+        insurance: normalizedInsurance,
+        goals: normalizedGoals,
+        schemaVersion: "phase0-v2",
+        onboardingCompleted: true,
         updatedAt: serverTimestamp(),
       };
 
@@ -640,6 +949,49 @@ export default function Onboarding() {
             placeholder="Bengaluru"
           />
         </div>
+      </div>
+
+      <div className={styles.inlineRow}>
+        <div className={styles.fieldRow}>
+          <label className={styles.label}>Retirement age</label>
+          <select
+            className={styles.select}
+            value={personal.retirementAge}
+            onChange={(e) => updatePersonal("retirementAge", e.target.value)}
+          >
+            {RETIREMENT_AGE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className={styles.fieldRow}>
+          <label className={styles.label}>Dependents count</label>
+          <input
+            type="number"
+            min="0"
+            className={styles.input}
+            value={personal.dependentsCount}
+            onChange={(e) => updatePersonal("dependentsCount", e.target.value)}
+            placeholder="0"
+          />
+        </div>
+      </div>
+
+      <div className={styles.fieldRow}>
+        <label className={styles.label}>Self-assessed risk tolerance</label>
+        <select
+          className={styles.select}
+          value={personal.riskToleranceSelf}
+          onChange={(e) => updatePersonal("riskToleranceSelf", e.target.value)}
+        >
+          {RISK_TOLERANCE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className={styles.fieldRow}>
@@ -808,7 +1160,10 @@ export default function Onboarding() {
       <h2 className={styles.sectionTitle}>Monthly cash flow</h2>
       <p className={styles.sectionSubtitle}>
         Rough numbers are okay. We just need a sense of where money
-        goes every month.
+        goes every month (excluding EMIs).
+      </p>
+      <p className={styles.sectionSubtitle}>
+        EMIs are captured in Liabilities.
       </p>
 
       <NumberFieldGrid
@@ -832,6 +1187,19 @@ export default function Onboarding() {
         values={assets}
         onChange={updateAssets}
       />
+
+      <div className={styles.sectionDivider} />
+
+      <h3 className={styles.sectionTitleSmall}>Monthly Contributions (Optional)</h3>
+      <p className={styles.sectionSubtitle}>
+        Add any ongoing monthly investments or retirement contributions.
+      </p>
+
+      <NumberFieldGrid
+        fields={CONTRIBUTION_FIELDS}
+        values={contributions}
+        onChange={updateContributions}
+      />
     </div>
   );
 
@@ -841,12 +1209,106 @@ export default function Onboarding() {
       <p className={styles.sectionSubtitle}>
         Outstanding loan amounts and other dues.
       </p>
-
+  
       <NumberFieldGrid
         fields={LIABILITY_FIELDS}
         values={liabilities}
         onChange={updateLiabilities}
       />
+  
+      <div className={styles.sectionDivider} />
+  
+      <h3 className={styles.sectionTitleSmall}>EMI and remaining tenure</h3>
+      <p className={styles.sectionSubtitle}>
+        Add EMI and remaining months only for loans with outstanding amounts.
+      </p>
+
+      {LIABILITY_LOAN_FIELDS.some(
+        (loan) => parseFloat(liabilities[loan.amountKey] || "0") > 0
+      ) ? (
+        <div className={styles.grid}>
+          {LIABILITY_LOAN_FIELDS.flatMap((loan) => {
+            const amt = parseFloat(liabilities[loan.amountKey] || "0");
+            if (amt <= 0) return [];
+            return [
+              (
+                <div key={`${loan.amountKey}-emi`} className={styles.fieldRow}>
+                  <label className={styles.label}>{loan.label} EMI</label>
+                  <input
+                    type="number"
+                    min="0"
+                    inputMode="decimal"
+                    className={styles.input}
+                    value={liabilities[loan.emiKey] ?? ""}
+                    onChange={(e) => updateLiabilities(loan.emiKey, e.target.value)}
+                  />
+                </div>
+              ),
+              (
+                <div key={`${loan.amountKey}-remaining`} className={styles.fieldRow}>
+                  <label className={styles.label}>
+                    {loan.label} remaining months{loan.remainingOptional ? " (optional)" : ""}
+                  </label>
+                  <select
+                    className={styles.select}
+                    value={liabilities[loan.remainingMonthsKey] ?? ""}
+                    onChange={(e) =>
+                      updateLiabilities(loan.remainingMonthsKey, e.target.value)
+                    }
+                  >
+                    {REMAINING_MONTH_OPTIONS.map((opt) => (
+                      <option key={String(opt.value)} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ),
+            ];
+          })}
+        </div>
+      ) : (
+        <p className={styles.sectionSubtitle}>
+          Enter outstanding amounts above to add EMI details.
+        </p>
+      )}
+    </div>
+  );  
+
+  const renderEmergencyStep = () => (
+    <div className={styles.stepBody}>
+      <h2 className={styles.sectionTitle}>Emergency fund</h2>
+      <p className={styles.sectionSubtitle}>
+        Tell us about your emergency buffer target and what is already set aside.
+      </p>
+
+      <div className={styles.grid}>
+        <div className={styles.fieldRow}>
+          <label className={styles.label}>Target months of expenses</label>
+          <select
+            className={styles.select}
+            value={emergency.monthsTarget}
+            onChange={(e) => updateEmergency("monthsTarget", e.target.value)}
+          >
+            {EMERGENCY_MONTH_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className={styles.fieldRow}>
+          <label className={styles.label}>Dedicated emergency amount</label>
+          <input
+            type="number"
+            min="0"
+            inputMode="decimal"
+            className={styles.input}
+            value={emergency.dedicatedAmount}
+            onChange={(e) => updateEmergency("dedicatedAmount", e.target.value)}
+          />
+        </div>
+      </div>
     </div>
   );
 
@@ -857,11 +1319,36 @@ export default function Onboarding() {
         Enter cover amount (sum assured) for each policy type.
       </p>
 
-      <NumberFieldGrid
-        fields={INSURANCE_FIELDS}
-        values={insurance}
-        onChange={updateInsurance}
-      />
+      <div className={styles.grid}>
+        {INSURANCE_ENTRIES.flatMap((entry) => [
+          (
+            <div key={`${entry.key}-cover`} className={styles.fieldRow}>
+              <label className={styles.label}>{entry.label}</label>
+              <input
+                type="number"
+                min="0"
+                inputMode="decimal"
+                className={styles.input}
+                value={insurance[entry.key] ?? ""}
+                onChange={(e) => updateInsurance(entry.key, e.target.value)}
+              />
+            </div>
+          ),
+          (
+            <div key={`${entry.key}-premium`} className={styles.fieldRow}>
+              <label className={styles.label}>{entry.label} premium per year</label>
+              <input
+                type="number"
+                min="0"
+                inputMode="decimal"
+                className={styles.input}
+                value={insurance[entry.premiumKey] ?? ""}
+                onChange={(e) => updateInsurance(entry.premiumKey, e.target.value)}
+              />
+            </div>
+          ),
+        ])}
+      </div>
     </div>
   );
 
@@ -873,11 +1360,73 @@ export default function Onboarding() {
         today.
       </p>
 
-      <NumberFieldGrid
-        fields={GOAL_FIELDS}
-        values={goals}
-        onChange={updateGoals}
-      />
+      <div className={styles.grid}>
+        {GOAL_ENTRIES.flatMap((entry) => {
+          if (entry.key === "totalGoalValue") {
+            return (
+              <div key={entry.key} className={styles.fieldRow}>
+                <label className={styles.label}>{entry.label}</label>
+                <input
+                  type="number"
+                  min="0"
+                  inputMode="decimal"
+                  className={styles.input}
+                  value={goals[entry.key] ?? ""}
+                  onChange={(e) => updateGoals(entry.key, e.target.value)}
+                />
+              </div>
+            );
+          }
+
+          return [
+            (
+              <div key={`${entry.key}-amount`} className={styles.fieldRow}>
+                <label className={styles.label}>{entry.label}</label>
+                <input
+                  type="number"
+                  min="0"
+                  inputMode="decimal"
+                  className={styles.input}
+                  value={goals[entry.key] ?? ""}
+                  onChange={(e) => updateGoals(entry.key, e.target.value)}
+                />
+              </div>
+            ),
+            (
+              <div key={`${entry.key}-horizon`} className={styles.fieldRow}>
+                <label className={styles.label}>{entry.label} horizon (years)</label>
+                <select
+                  className={styles.select}
+                  value={goals[entry.horizonKey] ?? ""}
+                  onChange={(e) => updateGoals(entry.horizonKey, e.target.value)}
+                >
+                  {GOAL_HORIZON_OPTIONS.map((opt) => (
+                    <option key={String(opt.value)} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ),
+            (
+              <div key={`${entry.key}-priority`} className={styles.fieldRow}>
+                <label className={styles.label}>{entry.label} priority</label>
+                <select
+                  className={styles.select}
+                  value={goals[entry.priorityKey] ?? ""}
+                  onChange={(e) => updateGoals(entry.priorityKey, e.target.value)}
+                >
+                  {GOAL_PRIORITY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ),
+          ];
+        })}
+      </div>
     </div>
   );
 
@@ -935,10 +1484,12 @@ export default function Onboarding() {
       case 3:
         return renderLiabilitiesStep();
       case 4:
-        return renderInsuranceStep();
+        return renderEmergencyStep();
       case 5:
-        return renderGoalsStep();
+        return renderInsuranceStep();
       case 6:
+        return renderGoalsStep();
+      case 7:
         return renderRiskStep();
       default:
         return renderPersonalStep();
@@ -993,19 +1544,21 @@ export default function Onboarding() {
                   <div>
                     <div className={styles.stepTitle}>{step.label}</div>
                     <div className={styles.stepSubtitle}>
-                      {index === 0 &&
+                      {step.key === "personal" &&
                         "Basic personal and income details"}
-                      {index === 1 &&
+                      {step.key === "cashFlow" &&
                         "Monthly expenses and lifestyle spending"}
-                      {index === 2 &&
+                      {step.key === "assets" &&
                         "Where your wealth is currently parked"}
-                      {index === 3 &&
+                      {step.key === "liabilities" &&
                         "Home loans, personal loans and cards"}
-                      {index === 4 &&
+                      {step.key === "emergency" &&
+                        "Emergency buffer and savings safety net"}
+                      {step.key === "insurance" &&
                         "Health and life cover for family"}
-                      {index === 5 &&
+                      {step.key === "goals" &&
                         "Education, retirement and other goals"}
-                      {index === 6 &&
+                      {step.key === "risk" &&
                         "Your comfort with risk and volatility"}
                     </div>
                   </div>
