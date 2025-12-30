@@ -62,7 +62,6 @@ const PLANS = [
   },
 ];
 
-
 // Load Razorpay script once
 async function loadRazorpayScript() {
   if (typeof window === "undefined") return false;
@@ -85,6 +84,9 @@ export default function PlansPage() {
   const [loading, setLoading] = useState(true);
   const [busyPlanId, setBusyPlanId] = useState(null);
   const [message, setMessage] = useState("");
+  const [planVisibility, setPlanVisibility] = useState("");
+  const [planGeneratedAt, setPlanGeneratedAt] = useState(null);
+  const [clarifyingQuestions, setClarifyingQuestions] = useState([]);
 
   // Load user + profile + mark recommended plan from riskQuiz
   useEffect(() => {
@@ -112,6 +114,29 @@ export default function PlansPage() {
             setRecommendedPlanId("max");
           }
         }
+
+        try {
+          const planRef = doc(db, "clientPlans", u.uid);
+          const planSnap = await getDoc(planRef);
+          if (planSnap.exists()) {
+            const planData = planSnap.data() || {};
+            const visibility =
+              planData.planVisibility ||
+              (planData.shared ? "shared" : "draft");
+            setPlanVisibility(visibility);
+            setClarifyingQuestions(planData?.llmNarration?.clarifyingQuestions || []);
+            setPlanGeneratedAt(planData.generatedAt || null);
+          } else {
+            setPlanVisibility("");
+            setClarifyingQuestions([]);
+            setPlanGeneratedAt(null);
+          }
+        } catch (planErr) {
+          console.error("Failed to load plan status", planErr);
+          setPlanVisibility("");
+          setClarifyingQuestions([]);
+          setPlanGeneratedAt(null);
+        }
       } catch (err) {
         console.error("Failed to load profile", err);
         setMessage("Could not load your profile. You can still choose a plan.");
@@ -122,6 +147,18 @@ export default function PlansPage() {
 
     return () => unsub();
   }, [router]);
+
+  const formatTimestamp = (ts) => {
+    if (!ts) return "";
+    if (typeof ts === "string") return ts;
+    if (typeof ts.toDate === "function") {
+      return ts.toDate().toLocaleString();
+    }
+    return "";
+  };
+
+  const showUnderReview = planVisibility && planVisibility !== "shared";
+  const showMissingInfo = showUnderReview && clarifyingQuestions.length > 0;
 
   const handleBuy = async (planId) => {
     try {
@@ -253,6 +290,67 @@ export default function PlansPage() {
             </div>
           )}
         </header>
+
+        {showUnderReview && (
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid #fde68a",
+              background: "#fffbeb",
+              color: "#92400e",
+              marginBottom: 16,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              Your plan is being reviewed. You can review your inputs on the Profile page.
+            </div>
+            {planGeneratedAt && (
+              <div style={{ fontSize: 12, color: "#92400e" }}>
+                Last generated: {formatTimestamp(planGeneratedAt)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showMissingInfo && (
+          <div
+            style={{
+              padding: "14px 16px",
+              borderRadius: 12,
+              border: "1px solid #e8edf5",
+              background: "#ffffff",
+              marginBottom: 18,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>
+              Help us finalize your plan
+            </div>
+            <ul style={{ margin: "8px 0 12px 18px", color: "#374151" }}>
+              {clarifyingQuestions.map((item) => (
+                <li key={item.id || item.question} style={{ marginBottom: 8 }}>
+                  <div style={{ fontWeight: 600 }}>{item.question}</div>
+                  <div style={{ fontSize: 12, color: "#6b7280" }}>
+                    {item.whyItMatters}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => router.push("/profile")}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 999,
+                border: "1px solid #d1d5db",
+                background: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              Go to Profile
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <p className={styles.info}>Loading your profile…</p>

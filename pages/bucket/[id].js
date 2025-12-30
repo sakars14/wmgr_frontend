@@ -79,11 +79,22 @@ function deriveRank(obj, fallback = 999) {
 export default function BucketDetail({ user }) {
   const router = useRouter();
   const { id } = router.query;
+  const isModel = router.query.source === "model";
   const [bucket, setBucket] = useState(null);
   const [qty, setQty] = useState(1);
   const [placing, setPlacing] = useState(false);
   const [result, setResult] = useState(null);
   const [err, setErr] = useState("");
+  const [orderErr, setOrderErr] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewErr, setPreviewErr] = useState("");
+  const [budgetInr, setBudgetInr] = useState("");
+  const [zerodhaConnected, setZerodhaConnected] = useState(null);
+  const [zerodhaUpdatedAt, setZerodhaUpdatedAt] = useState(null);
+  const [monthlySurplus, setMonthlySurplus] = useState(null);
+  const [suggestedBudget, setSuggestedBudget] = useState(null);
+  const [loadingPlanMeta, setLoadingPlanMeta] = useState(false);
   //const { plan } = usePlan(user);
 
   //const limit = PLAN_LIMIT[plan] ?? 0;
@@ -130,25 +141,152 @@ export default function BucketDetail({ user }) {
     (async () => {
       try {
         if (!user || !id) return;
+        setErr("");
+        setLoadingPlanMeta(true);
         const token = await auth.currentUser.getIdToken();
-        const res = await fetch(`${API_BASE}/buckets/${id}`, {
+        const endpoint = isModel ? "model-buckets" : "buckets";
+
+        const statusPromise = (async () => {
+          try {
+            const res = await fetch(`${API_BASE}/auth/zerodha/status`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error(`status ${res.status}`);
+            const statusData = await res.json();
+            if (alive) {
+              setZerodhaConnected(Boolean(statusData?.connected));
+              setZerodhaUpdatedAt(statusData?.updatedAt || statusData?.connectedAt || null);
+            }
+            return statusData;
+          } catch (e) {
+            if (alive) {
+              setZerodhaConnected(false);
+              setZerodhaUpdatedAt(null);
+            }
+            return null;
+          }
+        })();
+
+        const planPromise = (async () => {
+          try {
+            const res = await fetch(`${API_BASE}/plans/my`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) return;
+            const planData = await res.json();
+            const surplus = planData?.blueprint?.derived?.surplus?.monthlySurplus;
+            const surplusNum = Number(surplus);
+            if (!Number.isFinite(surplusNum)) return;
+            if (alive) {
+              setMonthlySurplus(surplusNum);
+              setSuggestedBudget(surplusNum);
+              const currentBudget = Number(budgetInr);
+              if (!budgetInr || !Number.isFinite(currentBudget) || currentBudget <= 0) {
+                setBudgetInr(String(Math.round(surplusNum)));
+              }
+            }
+          } catch (e) {
+            // ignore
+          }
+        })();
+
+        const res = await fetch(`${API_BASE}/${endpoint}/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(`API ${res.status}`);
         const data = await res.json();
-        const normalized = {
-          ...data,
-          id: data.id ?? data.bucketId ?? id,
-          name: data.name ?? data.title ?? id,
-          items: Array.isArray(data.items) ? data.items : (Array.isArray(data.legs) ? data.legs : []),
-        };
-        if (alive) setBucket(normalized);
+        let normalized = null;
+        if (isModel) {
+          const header = data?.bucket || {};
+          const version = data?.version || {};
+          const holdings = Array.isArray(version.holdings) ? version.holdings : [];
+          const priced = Array.isArray(data?.pricedHoldings) ? data.pricedHoldings : [];
+          const priceByKey = new Map(
+            priced.map((p) => [
+              `${p.exchange ?? "NSE"}:${p.symbol}`,
+              p.price ?? p.ltp ?? null,
+            ])
+          );
+          const merged = holdings.map((h) => {
+            const exchange = h.exchange ?? "NSE";
+            const symbol = h.symbol;
+            return {
+              ...h,
+              exchange,
+              symbol,
+              price: priceByKey.get(`${exchange}:${symbol}`) ?? null,
+            };
+          });
+          normalized = {
+            ...header,
+            id: header.bucketId ?? id,
+            name: header.name ?? id,
+            items: merged,
+            legs: merged,
+          };
+        } else {
+          normalized = {
+            ...data,
+            id: data.id ?? data.bucketId ?? id,
+            name: data.name ?? data.title ?? id,
+            items: Array.isArray(data.items) ? data.items : (Array.isArray(data.legs) ? data.legs : []),
+          };
+        }
+        if (alive) {
+          setBucket(normalized);
+          setPreview(null);
+          setPreviewErr("");
+          setOrderErr("");
+        }
+        const statusData = await statusPromise;
+        if (alive && statusData?.connected && normalized) {
+          try {
+            const instruments = Array.from(
+              new Set(
+                (normalized.items ?? normalized.legs ?? [])
+                  .map((item) => `${item.exchange ?? "NSE"}:${item.symbol}`)
+                  .filter(Boolean)
+              )
+            );
+            if (instruments.length) {
+              const quotesRes = await fetch(`${API_BASE}/zerodha/quotes`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ instruments }),
+              });
+              if (quotesRes.ok) {
+                const quoteData = await quotesRes.json();
+                const prices = quoteData?.prices || {};
+                if (alive) {
+                  setBucket((prev) => {
+                    if (!prev) return prev;
+                    const items = (prev.items ?? prev.legs ?? []).map((item) => {
+                      const key = `${item.exchange ?? "NSE"}:${item.symbol}`;
+                      const price = prices[key];
+                      if (typeof price !== "number") return item;
+                      return { ...item, price, ltp: price };
+                    });
+                    return { ...prev, items, legs: items };
+                  });
+                }
+              }
+            }
+          } catch (e) {
+            // ignore quotes errors
+          }
+        }
+        await Promise.allSettled([planPromise]);
       } catch (e) {
         if (alive) setErr(String(e));
+      } finally {
+        if (alive) setLoadingPlanMeta(false);
       }
     })();
     return () => { alive = false; };
-  }, [user, id]);
+  }, [user, id, isModel]);
 
   const locked = false;
   /*const locked = (() => {
@@ -157,9 +295,11 @@ export default function BucketDetail({ user }) {
     return rank > limit;
   })();*/
 
-  const buy = async () => {
+  const buyLegacy = async () => {
     if (!bucket) return;
-    setPlacing(true); setErr(""); setResult(null);
+    setPlacing(true);
+    setOrderErr("");
+    setResult(null);
     try {
       const token = await auth.currentUser.getIdToken();
       const legs = (bucket.items ?? []).map(i => ({
@@ -184,7 +324,65 @@ export default function BucketDetail({ user }) {
       if (!res.ok) throw new Error(JSON.stringify(body));
       setResult(body);
     } catch (e) {
-      setErr(String(e));
+      setOrderErr(String(e));
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  const buildPreview = async () => {
+    if (!bucket) return;
+    const budget = Number(budgetInr);
+    if (!Number.isFinite(budget) || budget <= 0) {
+      setPreviewErr("Enter a valid investment amount.");
+      return;
+    }
+    setPreviewLoading(true);
+    setPreviewErr("");
+    setOrderErr("");
+    setPreview(null);
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch(`${API_BASE}/model-buckets/${bucket.id}/order-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ budgetInr: budget }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.detail || "Preview failed");
+      setPreview(body);
+    } catch (e) {
+      setPreviewErr(e.message || "Preview failed");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const buyModel = async () => {
+    if (!bucket) return;
+    const budget = Number(budgetInr);
+    if (!Number.isFinite(budget) || budget <= 0) {
+      setOrderErr("Enter a valid investment amount.");
+      return;
+    }
+    setPlacing(true);
+    setOrderErr("");
+    setResult(null);
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch(`${API_BASE}/model-buckets/${bucket.id}/buy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ budgetInr: budget }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.detail || "Buy failed");
+      setResult(body);
+      if (body?.preview) {
+        setPreview(body.preview);
+      }
+    } catch (e) {
+      setOrderErr(e.message || "Buy failed");
     } finally {
       setPlacing(false);
     }
@@ -194,9 +392,29 @@ export default function BucketDetail({ user }) {
   if (err && !bucket) return <p style={{ color: "tomato" }}>{err}</p>;
   if (!bucket) return <p>Loading…</p>;
 
+  const formatWeight = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "-";
+    return `${(num * 100).toFixed(1)}%`;
+  };
+
+  const formatRupee = (value) => {
+    if (value === null || value === undefined || value === "") return "—";
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "—";
+    return `₹${num.toFixed(2)}`;
+  };
+
   const SERVICE_CHARGE = 20;
   const qtyNumber = Number(qty) || 0;
   const items = bucket.items ?? [];
+  const budgetValue = Number(budgetInr);
+  const hasValidBudget = Number.isFinite(budgetValue) && budgetValue > 0;
+  const connectHref = router?.asPath
+    ? `/connect?returnTo=${encodeURIComponent(router.asPath)}`
+    : "/connect";
+  const canTransact = zerodhaConnected === true && hasValidBudget;
+  const canLegacy = zerodhaConnected === true && !locked;
 
   let subtotal = 0;
   const pricedItems = items.map((i) => {
@@ -257,8 +475,9 @@ export default function BucketDetail({ user }) {
               color: "#6b7280",
             }}
           >
-            Managed by <strong>Growfolio experts</strong> · Thematic exposure to
-            silver via Zerodha Silver ETF (SILVERCASE).
+            {isModel
+              ? (bucket.description || "Model bucket built from a diversified ETF mix for your risk band.")
+              : <>Managed by <strong>Growfolio experts</strong> · Thematic exposure to silver via Zerodha Silver ETF (SILVERCASE).</>}
           </p>
           <p
             style={{
@@ -333,14 +552,23 @@ export default function BucketDetail({ user }) {
                   marginBottom: 16,
                 }}
               >
-                Silver Exposure 01 is built around{" "}
-                <strong>Zerodha Silver ETF (SILVERCASE)</strong>, giving you a
-                simple, low-ticket way to participate in silver prices without
-                dealing with physical storage or futures. It aims to track the
-                domestic price of physical silver over the long term, making it
-                a convenient satellite allocation alongside your core equity
-                portfolio. Returns are driven by global demand for silver in
-                both industrial use-cases and as a store of value.
+                {isModel ? (
+                  <>
+                    {bucket.description || "Model bucket built from a diversified ETF mix for your risk band."}{" "}
+                    Demo defaults only; weights can change as templates evolve.
+                  </>
+                ) : (
+                  <>
+                    Silver Exposure 01 is built around{" "}
+                    <strong>Zerodha Silver ETF (SILVERCASE)</strong>, giving you a
+                    simple, low-ticket way to participate in silver prices without
+                    dealing with physical storage or futures. It aims to track the
+                    domestic price of physical silver over the long term, making it
+                    a convenient satellite allocation alongside your core equity
+                    portfolio. Returns are driven by global demand for silver in
+                    both industrial use-cases and as a store of value.
+                  </>
+                )}
               </p>
 
               {/* time range selector */}
@@ -411,41 +639,72 @@ export default function BucketDetail({ user }) {
                   marginBottom: 12,
                 }}
               >
-                Silver Exposure 01 currently allocates 100% of its exposure to
-                <strong> Zerodha Silver ETF (SILVERCASE)</strong> split across
-                two legs. You can later diversify by adding more silver-linked
-                instruments or changing the weights.
+                {isModel ? (
+                  <>
+                    Holdings are weighted in the model template. Your quantities are derived from the investment amount.
+                  </>
+                ) : (
+                  <>
+                    Silver Exposure 01 currently allocates 100% of its exposure to
+                    <strong> Zerodha Silver ETF (SILVERCASE)</strong> split across
+                    two legs. You can later diversify by adding more silver-linked
+                    instruments or changing the weights.
+                  </>
+                )}
               </p>
-              <table style={{ width: "100%", fontSize: "0.9rem" }}>
-                <thead>
-                  <tr>
-                    <th align="left">Instrument</th>
-                    <th align="right">Default qty</th>
-                    <th align="right">Weight (demo)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(bucket.legs ?? []).map((leg, idx) => (
-                    <tr key={idx}>
-                      <td>
-                        {leg.exchange ?? "NSE"}:{leg.symbol}
-                      </td>
-                      <td align="right">
-                        {leg.defaultQty != null
-                          ? leg.defaultQty
-                          : "-"}
-                      </td>
-                      <td align="right">
-                        {bucket.legs.length
-                          ? `${(100 / bucket.legs.length).toFixed(
-                              0
-                            )}%`
-                          : "-"}
-                      </td>
+              {isModel ? (
+                <table style={{ width: "100%", fontSize: "0.9rem" }}>
+                  <thead>
+                    <tr>
+                      <th align="left">Instrument</th>
+                      <th align="right">Weight</th>
+                      <th align="right">Price</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(bucket.items ?? []).map((leg, idx) => (
+                      <tr key={idx}>
+                        <td>
+                          {leg.exchange ?? "NSE"}:{leg.symbol}
+                        </td>
+                        <td align="right">{formatWeight(leg.weight)}</td>
+                        <td align="right">{formatRupee(leg.price)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <table style={{ width: "100%", fontSize: "0.9rem" }}>
+                  <thead>
+                    <tr>
+                      <th align="left">Instrument</th>
+                      <th align="right">Default qty</th>
+                      <th align="right">Weight (demo)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(bucket.legs ?? []).map((leg, idx) => (
+                      <tr key={idx}>
+                        <td>
+                          {leg.exchange ?? "NSE"}:{leg.symbol}
+                        </td>
+                        <td align="right">
+                          {leg.defaultQty != null
+                            ? leg.defaultQty
+                            : "-"}
+                        </td>
+                        <td align="right">
+                          {bucket.legs.length
+                            ? `${(100 / bucket.legs.length).toFixed(
+                                0
+                              )}%`
+                            : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
         </div>
@@ -470,6 +729,30 @@ export default function BucketDetail({ user }) {
               Invest in this bucket
             </h2>
 
+            {loadingPlanMeta && (
+              <div style={{ fontSize: "0.8rem", color: "#6b7280", marginBottom: 8 }}>
+                Checking Zerodha connection...
+              </div>
+            )}
+            {zerodhaConnected === true && (
+              <div style={{ fontSize: "0.8rem", color: "#065f46", marginBottom: 8 }}>
+                Zerodha: Connected
+                {zerodhaUpdatedAt && (
+                  <span style={{ color: "#6b7280" }}>
+                    {" "}- Updated {new Date(zerodhaUpdatedAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+            )}
+            {zerodhaConnected === false && (
+              <div style={{ fontSize: "0.8rem", color: "#b91c1c", marginBottom: 10 }}>
+                <div>Connect Zerodha to fetch live prices and build an order preview.</div>
+                <a href={connectHref} style={{ color: "#2563eb", textDecoration: "underline" }}>
+                  Connect Zerodha
+                </a>
+              </div>
+            )}
+
             {/* existing lock message */}
             {/*locked && (
               <div
@@ -491,7 +774,7 @@ export default function BucketDetail({ user }) {
             )*/}
 
             {/* price breakdown */}
-            {pricedItems.length > 0 && (
+            {!isModel && pricedItems.length > 0 && (
               <>
                 <h3
                   style={{
@@ -570,7 +853,7 @@ export default function BucketDetail({ user }) {
             )}
 
             {/* informative note if no prices */}
-            {pricedItems.every((i) => i.price == null) && (
+            {!isModel && pricedItems.every((i) => i.price == null) && (
               <p
                 style={{
                   fontSize: "0.8rem",
@@ -583,41 +866,181 @@ export default function BucketDetail({ user }) {
               </p>
             )}
 
+            {isModel && (bucket.items ?? []).every((i) => i.price == null) && (
+              <p
+                style={{
+                  fontSize: "0.8rem",
+                  color: "#9ca3af",
+                  marginTop: 4,
+                }}
+              >
+                Live prices unavailable. Connect Zerodha to fetch latest prices.
+              </p>
+            )}
+
             {/* quantity + buy button */}
-            <div style={{ marginTop: 12 }}>
-              <label
-                style={{
-                  fontSize: "0.85rem",
-                  color: "#4b5563",
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                Number of shares per stock:
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={qty}
-                onChange={(e) => setQty(e.target.value)}
-                style={{
-                  width: "100%",
-                  maxWidth: 120,
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #d1d5db",
-                  marginBottom: 8,
-                }}
-                disabled={locked}
-              />
-              <button
-                className="btn"
-                onClick={buy}
-                disabled={placing || locked}
-              >
-                {placing ? "Placing…" : "Buy bucket"}
-              </button>
-            </div>
+            {isModel ? (
+              <div style={{ marginTop: 12 }}>
+                <label
+                  style={{
+                    fontSize: "0.85rem",
+                    color: "#4b5563",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Investment amount (₹):
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+                  <input
+                    type="number"
+                    min={1}
+                    value={budgetInr}
+                    onChange={(e) => setBudgetInr(e.target.value)}
+                    style={{
+                      width: "100%",
+                      maxWidth: 160,
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      border: "1px solid #d1d5db",
+                    }}
+                  />
+                  {Number.isFinite(suggestedBudget) && (
+                    <button
+                      type="button"
+                      onClick={() => setBudgetInr(String(Math.round(suggestedBudget)))}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        border: "1px solid #d7deea",
+                        background: "#fff",
+                        fontSize: 12,
+                      }}
+                    >
+                      Use surplus
+                    </button>
+                  )}
+                </div>
+                {Number.isFinite(monthlySurplus) && (
+                  <div style={{ fontSize: "0.8rem", color: "#6b7280", marginBottom: 8 }}>
+                    Monthly surplus: {formatRupee(monthlySurplus)}
+                  </div>
+                )}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <button
+                    className="btn ghost"
+                    onClick={buildPreview}
+                    disabled={previewLoading || !canTransact}
+                  >
+                    {previewLoading ? "Building…" : "Build order preview"}
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={buyModel}
+                    disabled={placing || !canTransact}
+                  >
+                    {placing ? "Placing…" : "Buy bucket"}
+                  </button>
+                </div>
+                {previewErr && (
+                  <div style={{ marginTop: 8, fontSize: "0.8rem", color: "#b91c1c" }}>
+                    {previewErr}
+                  </div>
+                )}
+                {orderErr && (
+                  <div style={{ marginTop: 6, fontSize: "0.8rem", color: "#b91c1c" }}>
+                    {orderErr}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ marginTop: 12 }}>
+                <label
+                  style={{
+                    fontSize: "0.85rem",
+                    color: "#4b5563",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Number of shares per stock:
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  style={{
+                    width: "100%",
+                    maxWidth: 120,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    border: "1px solid #d1d5db",
+                    marginBottom: 8,
+                  }}
+                  disabled={locked}
+                />
+                <button
+                  className="btn"
+                  onClick={buyLegacy}
+                  disabled={placing || locked || !canLegacy}
+                >
+                  {placing ? "Placing…" : "Buy bucket"}
+                </button>
+                {orderErr && (
+                  <div style={{ marginTop: 6, fontSize: "0.8rem", color: "#b91c1c" }}>
+                    {orderErr}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isModel && preview && (
+              <div style={{ marginTop: 16, padding: 12, borderRadius: 12, border: "1px solid #e5e7eb", background: "#fafafa" }}>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Order preview</div>
+                {preview.holdings && preview.holdings.length > 0 ? (
+                  <table style={{ width: "100%", fontSize: "0.85rem", marginBottom: 8 }}>
+                    <thead>
+                      <tr>
+                        <th align="left">Stock</th>
+                        <th align="right">Qty</th>
+                        <th align="right">Price</th>
+                        <th align="right">Line total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.holdings.map((h, idx) => (
+                        <tr key={idx}>
+                          <td>{`${h.exchange ?? "NSE"}:${h.symbol}`}</td>
+                          <td align="right">{h.qty}</td>
+                          <td align="right">{formatRupee(h.price)}</td>
+                          <td align="right">{formatRupee(h.lineTotal)}</td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td colSpan={3} align="right">Subtotal</td>
+                        <td align="right">{formatRupee(preview.subtotal)}</td>
+                      </tr>
+                      <tr>
+                        <td colSpan={3} align="right">Leftover</td>
+                        <td align="right">{formatRupee(preview.leftover)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+                    Budget too low to buy any shares. Increase the investment amount and try again.
+                  </div>
+                )}
+                {!!(preview.warnings || []).length && (
+                  <ul style={{ margin: "8px 0 0 18px", fontSize: "0.8rem", color: "#6b7280" }}>
+                    {preview.warnings.map((w, idx) => (
+                      <li key={idx}>{w}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

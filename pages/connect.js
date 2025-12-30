@@ -1,8 +1,10 @@
 // pages/connect.js
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/router";
 import { auth } from "../lib/firebase";
 
 export default function Connect() {
+  const router = useRouter();
   const [msg, setMsg] = useState("Preparing Zerodha login…");
   const [loginUrl, setLoginUrl] = useState("");
 
@@ -21,7 +23,13 @@ export default function Connect() {
       }
 
       const token = await u.getIdToken();
-      const res = await fetch(`${base}/auth/zerodha/login`, {
+      const returnTo =
+        typeof router.query.returnTo === "string" ? router.query.returnTo : "";
+      const loginEndpoint = returnTo
+        ? `${base}/auth/zerodha/login?returnTo=${encodeURIComponent(returnTo)}`
+        : `${base}/auth/zerodha/login`;
+
+      const res = await fetch(loginEndpoint, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -42,12 +50,13 @@ export default function Connect() {
     } catch (e) {
       setMsg(`Error: ${e}`);
     }
-  }, []);
+  }, [router.query.returnTo]);
 
   useEffect(() => {
+    if (!router.isReady) return;
     // Kick off automatically
     start();
-  }, [start]);
+  }, [start, router.isReady]);
 
   return (
     <div className="container">

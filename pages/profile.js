@@ -18,12 +18,6 @@ const INFO_TABS = [
 // If some key names differ, just tweak the key values.
 const CASH_FLOW_FIELDS = [
   { key: "rent", label: "Rent" },
-  { key: "homeEmi1", label: "Home EMI 1" },
-  { key: "homeEmi2", label: "Home EMI 2" },
-  { key: "personalLoanEmi", label: "Personal Loan EMI" },
-  { key: "creditCardEmi", label: "Credit Card EMI" },
-  { key: "vehicleLoanEmi", label: "Vehicle Loan EMI" },
-  { key: "otherEmi", label: "Other EMI" },
   { key: "maintainence", label: "Maintainence" },
   { key: "groceries", label: "Groceries" },
   { key: "utilities", label: "Utilities" },
@@ -36,7 +30,8 @@ const CASH_FLOW_FIELDS = [
   { key: "parentsExpense", label: "Parents Expense" },
   { key: "miscExpense", label: "Misc Expense" },
   { key: "others", label: "Others" },
-  { key: "totalMonthlyExpense", label: "Total Monthly Expense" },
+  { key: "annualLargeExpenses", label: "Annual Large Expenses (yearly)" },
+  { key: "totalMonthlyExpense", label: "Total Monthly Expense (excluding EMIs)" },
 ];
 
 const ASSET_FIELDS = [
@@ -68,6 +63,21 @@ const ASSET_FIELDS = [
   { key: "totalAsset", label: "Total Asset" },
 ];
 
+const CONTRIBUTION_FIELDS = [
+  { key: "sipEquityMfMonthly", label: "Equity MF SIP (per month)" },
+  { key: "sipDebtMfMonthly", label: "Debt MF SIP (per month)" },
+  { key: "sipDirectEquityMonthly", label: "Direct Stocks SIP (per month)" },
+  { key: "ppfMonthly", label: "PPF (per month)" },
+  { key: "npsMonthly", label: "NPS (per month)" },
+  { key: "epfMonthly", label: "EPF (per month)" },
+  { key: "otherInvestMonthly", label: "Other Investments (per month)" },
+];
+
+const EMERGENCY_FIELDS = [
+  { key: "monthsTarget", label: "Target Months of Expenses" },
+  { key: "dedicatedAmount", label: "Dedicated Emergency Amount" },
+];
+
 const LIABILITY_FIELDS = [
   { key: "houseLoan1", label: "House Loan 1" },
   { key: "houseLoan2", label: "House Loan 2" },
@@ -93,6 +103,16 @@ const INSURANCE_FIELDS = [
   { key: "otherPolicy", label: "Other Policy" },
 ];
 
+const INSURANCE_PREMIUM_FIELDS = INSURANCE_FIELDS.map((field) => ({
+  key: `${field.key}PremiumPerYear`,
+  label: `${field.label} Premium per year`,
+}));
+
+const INSURANCE_FIELDS_EXTENDED = [
+  ...INSURANCE_FIELDS,
+  ...INSURANCE_PREMIUM_FIELDS,
+];
+
 const GOAL_FIELDS = [
   { key: "child1UnderGraduateEducation", label: "Child 1 UG Education" },
   { key: "child2UnderGraduateEducation", label: "Child 2 UG Education" },
@@ -109,6 +129,17 @@ const GOAL_FIELDS = [
   { key: "others", label: "Others" },
   { key: "totalGoalValue", label: "Total Goal Value" },
 ];
+
+const GOAL_FIELDS_EXTENDED = GOAL_FIELDS.flatMap((field) => {
+  if (field.key === "totalGoalValue") {
+    return [field];
+  }
+  return [
+    field,
+    { key: `${field.key}HorizonYears`, label: `${field.label} Horizon (years)` },
+    { key: `${field.key}Priority`, label: `${field.label} Priority` },
+  ];
+});
 
 const PROFESSION_LABELS = {
     salaried: "Salaried",
@@ -138,26 +169,43 @@ function SectionGrid({ title, fields, values }) {
 }
 
 export default function ProfilePage() {
+  const API_BASE =
+    process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080";
   const router = useRouter();
   const [profile, setProfile] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const [planShared, setPlanShared] = useState(false);
+  const [planGeneratedAt, setPlanGeneratedAt] = useState(null);
+  const [clarifyingQuestions, setClarifyingQuestions] = useState([]);
 
   const [riskLabel, setRiskLabel] = useState("");
   const [riskScore, setRiskScore] = useState(null);
+  const [missingInfoNote, setMissingInfoNote] = useState("");
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) {
-      router.replace("/");
-      return;
-    }
-
     async function loadProfileAndPlan() {
+      setLoading(true);
+      // If a previous attempt failed, clear the banner before trying again
+      setError("");
+      setNotice("");
+
       try {
+        const user = auth.currentUser;
+        if (!user) {
+          setError("Please sign in first.");
+          setLoading(false);
+          return;
+        }
+
+        // Always define both names so we never crash with "idToken is not defined"
+        // (some older code paths / fast-refresh bundles may still reference it).
+        const idToken = await user.getIdToken();
+        const token = idToken;
+
         const ref = doc(db, "clientProfiles", user.uid);
         const snap = await getDoc(ref);
         if (!snap.exists()) {
@@ -172,7 +220,10 @@ export default function ProfilePage() {
         setProfile(data);
 
         // Check share flag via backend (avoids Firestore client rules errors)
-        await refreshPlanShared();
+        await refreshPlanShared({ uid: user.uid, token, idToken });
+
+        // Successful load => ensure banner stays cleared
+        setError("");
       } catch (e) {
         console.error("Failed to load profile", e);
         setError("Could not load your profile. Please try again.");
@@ -181,28 +232,67 @@ export default function ProfilePage() {
       }
     }
 
-    async function refreshPlanShared() {
+    const refreshPlanShared = async ({ uid, token, idToken } = {}) => {
       try {
-        const token = await user.getIdToken();
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/plans/shared/me`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const currentUser = auth.currentUser;
+        if (!currentUser || !uid) {
+          setPlanShared(false);
+          return;
+        }
+
+        const authToken = token || idToken || (await currentUser.getIdToken());
+        const res = await fetch(`${API_BASE}/plans/shared/me`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${authToken}` },
         });
-        if (!res.ok) throw new Error(`status ${res.status}`);
+        if (!res.ok) {
+          setPlanShared(false);
+          return;
+        }
         const data = await res.json();
-        setPlanShared(Boolean(data?.shared));
+        setPlanShared(!!data.shared);
+        // Use backend as source-of-truth (avoids Firestore permission noise on profile page)
+        setPlanGeneratedAt(data.generatedAt ? new Date(data.generatedAt) : null);
       } catch (err) {
         console.error("Failed to load plan share flag", err);
         setPlanShared(false);
+        setPlanGeneratedAt(null);
       }
-    }
+    };
 
     loadProfileAndPlan();
-    const poll = setInterval(refreshPlanShared, 4000);
+    const poll = setInterval(() => refreshPlanShared({ uid: auth.currentUser?.uid }), 4000);
 
     return () => {
       clearInterval(poll);
     };
   }, [router]);
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    if (router.query.notice === "plan-pending") {
+      setNotice("Saved profile. Plan generation pending, please retry later.");
+      router.replace("/profile", undefined, { shallow: true });
+      const timer = setTimeout(() => setNotice(""), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [router.isReady, router.query.notice]);
+
+  const handleUpdateDetails = () => {
+    setMissingInfoNote("Update your inputs below and resubmit.");
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const formatTimestamp = (ts) => {
+    if (!ts) return "";
+    if (typeof ts === "string") return ts;
+    if (typeof ts.toDate === "function") {
+      return ts.toDate().toLocaleString();
+    }
+    return "";
+  };
 
   if (loading) {
     return (
@@ -286,6 +376,17 @@ export default function ProfilePage() {
     </div>
 
     <div className={styles.fieldRow}>
+      <div className={styles.label}>Retirement age</div>
+      <div className={styles.value}>{personal.retirementAge || "ƒ?"}</div>
+    </div>
+
+    <div className={styles.fieldRow}>
+      <div className={styles.label}>Dependents count</div>
+      <div className={styles.value}>{personal.dependentsCount || "ƒ?"}</div>
+    </div>
+
+
+    <div className={styles.fieldRow}>
       <div className={styles.label}>City</div>
       <div className={styles.value}>{personal.city || "—"}</div>
     </div>
@@ -307,6 +408,12 @@ export default function ProfilePage() {
         </div>
       </div>
     )}
+
+    <div className={styles.fieldRow}>
+      <div className={styles.label}>Risk tolerance (self)</div>
+      <div className={styles.value}>{personal.riskToleranceSelf || "ƒ?"}</div>
+    </div>
+
 
     <div className={styles.fieldRow}>
       <div className={styles.label}>Tax regime</div>
@@ -360,6 +467,39 @@ export default function ProfilePage() {
   </div>
 </section>
 
+<section className={styles.section}>
+  <h3 className={styles.sectionTitle}>Emergency fund</h3>
+  <div className={styles.grid}>
+    {EMERGENCY_FIELDS.map((f) => (
+      <div key={f.key} className={styles.fieldRow}>
+        <div className={styles.label}>{f.label}</div>
+        <div className={styles.value}>
+          {profile.emergency && String(profile.emergency[f.key] ?? "") !== ""
+            ? profile.emergency[f.key]
+            : "ƒ?"}
+        </div>
+      </div>
+    ))}
+  </div>
+</section>
+
+<section className={styles.section}>
+  <h3 className={styles.sectionTitle}>Monthly contributions</h3>
+  <div className={styles.grid}>
+    {CONTRIBUTION_FIELDS.map((f) => (
+      <div key={f.key} className={styles.fieldRow}>
+        <div className={styles.label}>{f.label}</div>
+        <div className={styles.value}>
+          {profile.contributions && String(profile.contributions[f.key] ?? "") !== ""
+            ? profile.contributions[f.key]
+            : "ƒ?"}
+        </div>
+      </div>
+    ))}
+  </div>
+</section>
+
+
         </>
       );
     }
@@ -398,7 +538,7 @@ export default function ProfilePage() {
       return (
         <SectionGrid
           title="Insurance coverage"
-          fields={INSURANCE_FIELDS}
+          fields={INSURANCE_FIELDS_EXTENDED}
           values={profile.insurance || {}}
         />
       );
@@ -408,7 +548,7 @@ export default function ProfilePage() {
       return (
         <SectionGrid
           title="Financial goals"
-          fields={GOAL_FIELDS}
+          fields={GOAL_FIELDS_EXTENDED}
           values={profile.goals || {}}
         />
       );
@@ -426,7 +566,7 @@ export default function ProfilePage() {
             </p>
           </section>
         );
-      }  
+    }
 
     return null;
   };
@@ -524,6 +664,61 @@ export default function ProfilePage() {
             )}
           </div>
         </header>
+
+        {notice && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #fdba74",
+              background: "#fff7ed",
+              color: "#9a3412",
+            }}
+          >
+            {notice}
+          </div>
+        )}
+
+        {!!clarifyingQuestions.length && (
+          <section className={styles.section}>
+            <div className={styles.metricCard}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                Missing info to finalize your plan
+              </div>
+              <ul style={{ margin: "8px 0 12px 18px", color: "#374151" }}>
+                {clarifyingQuestions.map((item) => (
+                  <li key={item.id || item.question} style={{ marginBottom: 8 }}>
+                    <div style={{ fontWeight: 600 }}>{item.question}</div>
+                    <div style={{ fontSize: 12, color: "#6b7280" }}>
+                      {item.whyItMatters}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>
+                Once you update and resubmit, your plan will regenerate and go for review.
+              </div>
+              {planGeneratedAt && (
+                <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>
+                  Last generated: {formatTimestamp(planGeneratedAt)}
+                </div>
+              )}
+              {missingInfoNote && (
+                <div style={{ fontSize: 12, color: "#9a3412", marginBottom: 8 }}>
+                  {missingInfoNote}
+                </div>
+              )}
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={handleUpdateDetails}
+              >
+                Update details
+              </button>
+            </div>
+          </section>
+        )}
 
         {error && <div className={styles.error}>{error}</div>}
 

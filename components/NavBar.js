@@ -10,15 +10,14 @@ import { doc, getDoc } from "firebase/firestore";
 
 export default function NavBar({ user }) {
   const { plan } = usePlan(user);
-  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-  // or hard-code for now: const adminEmail = "srivastavasakar@gmail.com";
-  const isAdmin = user && user.email === adminEmail;
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const planLabel =
     plan === "none" || !plan ? "Free" : plan[0].toUpperCase() + plan.slice(1);
 
-    const [profileName, setProfileName] = useState("");
-    const [initials, setInitials] = useState("");
+  const [profileName, setProfileName] = useState("");
+  const [initials, setInitials] = useState("");
     
     useEffect(() => {
       const unsub = onAuthStateChanged(auth, async (u) => {
@@ -58,6 +57,31 @@ export default function NavBar({ user }) {
     
       return () => unsub();
     }, []);   
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!user) {
+        if (alive) setIsAdmin(false);
+        return;
+      }
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`${API_BASE}/dev/whoami`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (alive) {
+          const raw = data?.is_admin;
+          const isAdminVal = Array.isArray(raw) ? !!raw[0] : !!raw;
+          setIsAdmin(isAdminVal);
+        }
+      } catch (e) {
+        if (alive) setIsAdmin(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [user, API_BASE]);
   
   return (
     <header className="header">
@@ -70,7 +94,6 @@ export default function NavBar({ user }) {
           {isAdmin && (
             <Link href="/admin">Admin</Link>
           )}
-          <Link href="/connect">Connect Zerodha</Link>
         </div>
 
         <div className="spacer" />
