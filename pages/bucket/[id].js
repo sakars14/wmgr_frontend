@@ -1,7 +1,9 @@
 // pages/bucket/[id].js
+import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { auth } from "../../lib/firebase";
+import { fetchZerodhaStatus } from "../../lib/zerodhaStatus";
 //import { usePlan } from "../../lib/usePlan";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -148,14 +150,10 @@ export default function BucketDetail({ user }) {
 
         const statusPromise = (async () => {
           try {
-            const res = await fetch(`${API_BASE}/auth/zerodha/status`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok) throw new Error(`status ${res.status}`);
-            const statusData = await res.json();
+            const statusData = await fetchZerodhaStatus(API_BASE, token);
             if (alive) {
-              setZerodhaConnected(Boolean(statusData?.connected));
-              setZerodhaUpdatedAt(statusData?.updatedAt || statusData?.connectedAt || null);
+              setZerodhaConnected(statusData.connected);
+              setZerodhaUpdatedAt(statusData.updatedAt);
             }
             return statusData;
           } catch (e) {
@@ -950,6 +948,13 @@ export default function BucketDetail({ user }) {
                 {orderErr && (
                   <div style={{ marginTop: 6, fontSize: "0.8rem", color: "#b91c1c" }}>
                     {orderErr}
+                  </div>
+                )}
+                {result?.investmentId && (
+                  <div style={{ marginTop: 8 }}>
+                    <Link href={`/portfolio/${result.investmentId}`} className="btn ghost">
+                      View in Portfolio
+                    </Link>
                   </div>
                 )}
               </div>

@@ -1,0 +1,514 @@
+.page {
+  --accent: #337576;
+  --accent-hover: #2b6460;
+  --bg: #f2f8f7;
+  --text: #102f2e;
+  --muted: #5c7271;
+  --nav-height: 64px;
+  background: var(--bg);
+  color: var(--text);
+  min-height: calc(100vh - 48px - var(--nav-height));
+  height: calc(100vh - 48px - var(--nav-height));
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell {
+  width: 100%;
+  padding: 24px 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0 24px;
+}
+
+.wordmark {
+  font-weight: 700;
+  font-size: 1.2rem;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  color: var(--accent);
+}
+
+.navCenter {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.navLink {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.navLink:hover {
+  color: var(--accent-hover);
+}
+
+.navRight {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #e7efef;
+  border-radius: 999px;
+  padding: 4px;
+  border: 1px solid #d6e2e2;
+}
+
+.toggleButton {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: #3b5857;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toggleButtonActive {
+  background: var(--accent);
+  color: #fff;
+}
+
+.signIn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.signIn:hover {
+  background: var(--accent-hover);
+}
+
+.heroWrap {
+  margin-top: 10px;
+}
+
+.hero {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  padding: 40px;
+  border-radius: 20px;
+  border: 1px solid #e1ebeb;
+  background: linear-gradient(135deg, rgba(51, 117, 118, 0.12), #f6f9f9 60%);
+  box-shadow: 0 12px 24px rgba(18, 44, 43, 0.08);
+}
+
+.heroTitle {
+  font-size: clamp(2rem, 3vw, 3.2rem);
+  font-weight: 800;
+  margin: 0 0 12px;
+}
+
+.heroSubtitle {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.heroActions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton {
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.primaryButton {
+  background: var(--accent);
+  color: #fff;
+}
+
+.primaryButton:hover {
+  background: var(--accent-hover);
+}
+
+.secondaryButton {
+  background: transparent;
+  color: var(--accent);
+}
+
+.heroArt {
+  display: grid;
+  gap: 14px;
+}
+
+.heroCard {
+  background: #fff;
+  border: 1px solid #e2ecec;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 12px 24px rgba(18, 44, 43, 0.08);
+}
+
+.heroMetric {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.heroMetric strong {
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.howSection {
+  margin-top: 32px;
+  display: grid;
+  gap: 16px;
+}
+
+.howGrid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.howCard {
+  background: #fff;
+  border: 1px solid #e2ecec;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 18px rgba(18, 44, 43, 0.06);
+}
+
+.sectionTitle {
+  font-size: 1.1rem;
+  margin: 0 0 12px;
+}
+
+.businessWrap {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  height: 100%;
+}
+
+.businessGrid {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr 1fr;
+  gap: 18px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+}
+
+.businessPage {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+}
+
+.businessMain {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.businessColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  height: 100%;
+}
+
+.businessColumnCenter {
+  min-height: 0;
+  height: 100%;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e2ecec;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 18px rgba(18, 44, 43, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: 0 14px 28px rgba(51, 117, 118, 0.18);
+}
+
+.cardButton {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid #e2ecec;
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.cardButton:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: 0 14px 28px rgba(51, 117, 118, 0.18);
+}
+
+.cardPrimary {
+  border-color: rgba(51, 117, 118, 0.4);
+  background: rgba(51, 117, 118, 0.08);
+}
+
+.cardR2Primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.cardR2Primary .cardBody,
+.cardR2Primary .cardTitle,
+.cardR2Primary .cardCta {
+  color: #ffffff;
+}
+
+.cardR2Primary:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.cardTitle {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.cardBody {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.cardList {
+  margin: 12px 0 0;
+  padding-left: 14px;
+  color: var(--muted);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.chip {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(51, 117, 118, 0.12);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.carousel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  gap: 12px;
+}
+
+.carouselText {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.4;
+  text-align: center;
+}
+
+.dotRow {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: auto;
+  padding-bottom: 2px;
+  width: 100%;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  cursor: pointer;
+}
+
+.dotActive {
+  background: var(--accent);
+}
+
+.cardL1 {
+  height: 100%;
+}
+
+.cardL2 {
+  height: 100%;
+}
+
+.cardB {
+  display: flex;
+}
+
+.cardR1 {
+  height: 100%;
+}
+
+.cardR2 {
+  height: 100%;
+}
+
+.cardCta {
+  margin-top: 14px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.landingMain {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.appointmentsWrap {
+  margin-top: 40px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e2ecec;
+  padding: 28px;
+  box-shadow: 0 12px 24px rgba(18, 44, 43, 0.08);
+}
+
+@media (max-width: 1024px), (max-height: 760px) {
+  .businessMain {
+    padding: 16px 0 20px;
+  }
+
+  .businessWrap,
+  .businessGrid {
+    height: auto;
+  }
+
+  .businessColumn,
+  .businessColumnCenter {
+    height: auto;
+  }
+
+  .card,
+  .cardButton {
+    flex: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .page {
+    min-height: auto;
+    height: auto;
+  }
+
+  .shell {
+    height: auto;
+  }
+
+  .businessPage {
+    min-height: auto;
+    height: auto;
+  }
+
+  .businessMain {
+    padding: 16px 0 20px;
+  }
+
+  .businessWrap {
+    min-height: auto;
+    height: auto;
+  }
+
+  .businessGrid {
+    grid-template-columns: 1fr;
+    height: auto;
+    flex: none;
+  }
+
+  .businessColumn,
+  .businessColumnCenter {
+    min-height: auto;
+    height: auto;
+  }
+
+  .card,
+  .cardButton {
+    height: auto;
+    flex: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero {
+    padding: 28px;
+  }
+
+  .nav {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .navRight {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

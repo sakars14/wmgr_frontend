@@ -1,7 +1,6 @@
 // frontend/pages/my-plan.js
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import NavBar from "../components/NavBar";
 import { auth } from "../lib/firebase";
 
 const SIP_DELTA_OPTIONS = [-50000, -20000, -10000, 0, 5000, 10000, 20000, 50000];
@@ -40,12 +39,95 @@ function pct(n) {
   return `${num}%`;
 }
 
+function pickRecommendedBucket(payload) {
+  const buckets =
+    (payload && Array.isArray(payload.buckets) && payload.buckets) ||
+    (Array.isArray(payload) && payload) ||
+    [];
+
+  const recId =
+    (payload && (payload.recommendedBucketId || payload.recommended_bucket_id)) || null;
+
+  const byFlag = buckets.find(
+    (b) =>
+      b?.isRecommended === true ||
+      b?.recommended === true ||
+      b?.is_recommended === true ||
+      b?.recommendedBucket === true
+  );
+
+  const byId = recId
+    ? buckets.find((b) => (b?.bucketId || b?.id) === recId)
+    : null;
+
+  const riskHint =
+    payload?.recommendedRiskBand || payload?.recommended_risk_band || payload?.riskBand || null;
+
+  const byRisk = riskHint
+    ? buckets.find((b) => (b?.riskBand || b?.risk_band) === riskHint)
+    : null;
+
+  return byFlag || byId || byRisk || buckets[0] || null;
+}
+
+function normalizeLabel(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function resolveRecommendedPlanKey(risk) {
+  const raw = normalizeLabel(
+    risk?.finalBand || risk?.quizLabel || risk?.band || risk?.label || ""
+  );
+  if (!raw) return "";
+  if (raw.includes("low") || raw.includes("conservative") || raw.includes("safety")) {
+    return "safety";
+  }
+  if (raw.includes("balanced") || raw.includes("moderate")) {
+    return "balanced";
+  }
+  if (raw.includes("high") || raw.includes("aggressive") || raw.includes("growth")) {
+    return "growth";
+  }
+  return "";
+}
+
+function planMatchesKey(planItem, key) {
+  if (!key) return false;
+  const target = normalizeLabel(key);
+  const name = normalizeLabel(planItem?.name);
+  const id = normalizeLabel(planItem?.id || planItem?.key || planItem?.slug);
+  const aliases = {
+    safety: ["safety", "low", "conservative"],
+    balanced: ["balanced", "moderate"],
+    growth: ["growth", "high", "aggressive"],
+  };
+  const checks = aliases[target] || [target];
+  return checks.some((token) => id.includes(token) || name.includes(token));
+}
+
 function PlanViewer({ plan }) {
   if (!plan) return null;
 
   const profileSummary = plan.profileSummary || {};
   const risk = plan.risk || {};
   const currentAllocation = plan.currentAllocation || {};
+  const planItems = Array.isArray(plan.plans) ? plan.plans : [];
+  const recommendedPlanKey = resolveRecommendedPlanKey(risk);
+  const selectedPlan =
+    (recommendedPlanKey && planItems.find((p) => planMatchesKey(p, recommendedPlanKey))) ||
+    planItems.find((p) => p.recommended) ||
+    planItems[0] ||
+    null;
+  const displayPlans = selectedPlan
+    ? [
+        {
+          ...selectedPlan,
+          recommended:
+            selectedPlan.recommended ||
+            (recommendedPlanKey && planMatchesKey(selectedPlan, recommendedPlanKey)),
+        },
+      ]
+    : [];
 
   return (
     <div style={{ marginTop: 14, padding: 14, border: "1px solid #e8edf5", borderRadius: 12, background: "#fff" }}>
@@ -80,7 +162,7 @@ function PlanViewer({ plan }) {
       </div>
 
       <div style={{ marginTop: 14, fontWeight: 900 }}>Plans</div>
-      {(plan.plans || []).map((p) => (
+      {displayPlans.map((p) => (
         <div key={p.id} style={{ marginTop: 10, padding: 12, border: "1px solid #eef2f8", borderRadius: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <div style={{ fontWeight: 900 }}>
@@ -121,8 +203,7 @@ export default function MyPlan() {
   const [simulation, setSimulation] = useState(null);
   const [simulationRequest, setSimulationRequest] = useState(null);
   const [saveMsg, setSaveMsg] = useState("");
-  const [recommendedBuckets, setRecommendedBuckets] = useState([]);
-  const [recommendedRiskBand, setRecommendedRiskBand] = useState("");
+  const [recommendedBucketsPayload, setRecommendedBucketsPayload] = useState(null);
   const [recommendedError, setRecommendedError] = useState("");
 
   useEffect(() => {
@@ -153,8 +234,7 @@ export default function MyPlan() {
         if (visibility !== "shared") {
           setMsg("Your plan is being reviewed. You can review your inputs on the Profile page.");
           setPlan(null);
-          setRecommendedBuckets([]);
-          setRecommendedRiskBand("");
+          setRecommendedBucketsPayload(null);
           setRecommendedError("");
           return;
         }
@@ -184,11 +264,9 @@ export default function MyPlan() {
           if (!recRes.ok) {
             throw new Error(recData?.detail || "Failed to load recommended buckets");
           }
-          setRecommendedBuckets(Array.isArray(recData?.buckets) ? recData.buckets : []);
-          setRecommendedRiskBand(recData?.recommendedRiskBand || "");
+          setRecommendedBucketsPayload(recData);
         } catch (err) {
-          setRecommendedBuckets([]);
-          setRecommendedRiskBand("");
+          setRecommendedBucketsPayload(null);
           setRecommendedError(err.message || "Failed to load recommended buckets");
         }
       } catch (e) {
@@ -196,8 +274,7 @@ export default function MyPlan() {
         setPlan(null);
         setGoalProjections([]);
         setGoalAssumptions(null);
-        setRecommendedBuckets([]);
-        setRecommendedRiskBand("");
+        setRecommendedBucketsPayload(null);
         setRecommendedError("");
       } finally {
         setLoading(false);
@@ -281,6 +358,9 @@ export default function MyPlan() {
         : `Emergency ${emergencyTargetMonths}m`;
     return `${sipPart}, ${debtPart}, ${emergencyPart}`;
   };
+
+  const recommendedBucket = pickRecommendedBucket(recommendedBucketsPayload);
+  const displayBuckets = recommendedBucket ? [recommendedBucket] : [];
 
   const handleSimulate = async () => {
     try {
@@ -366,7 +446,6 @@ export default function MyPlan() {
 
   return (
     <>
-      <NavBar />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 16px" }}>
         <h1>My Plan</h1>
         {loading ? (
@@ -382,18 +461,19 @@ export default function MyPlan() {
 
             {planVisibility === "shared" && (
               <>
-                {recommendedBuckets.length > 0 && (
+                {displayBuckets.length > 0 && (
                   <section style={{ marginTop: 18 }}>
                     <div style={{ padding: "16px 18px", borderRadius: 16, border: "1px solid #e8edf5", background: "#fff" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                        <div style={{ fontWeight: 700 }}>Recommended buckets</div>
+                        <div style={{ fontWeight: 700 }}>Recommended bucket</div>
                         <div style={{ fontSize: 12, color: "#6b7280" }}>Based on your risk profile</div>
                       </div>
                       {recommendedError && (
                         <div style={{ fontSize: 12, color: "#b91c1c", marginBottom: 8 }}>{recommendedError}</div>
                       )}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-                        {recommendedBuckets.map((bucket) => {
+                        {displayBuckets.map((bucket) => {
+                          const bucketId = bucket?.bucketId || bucket?.id;
                           const mix = bucket.assetMix || {};
                           const mixItems = [
                             { label: "Equity", value: mix.equity },
@@ -401,11 +481,11 @@ export default function MyPlan() {
                             { label: "Gold", value: mix.gold },
                             { label: "Cash", value: mix.cash },
                           ].filter((item) => Number(item.value) > 0);
-                          const isRecommended = bucket.riskBand === recommendedRiskBand;
+                          const isRecommended = true;
                           return (
-                            <div key={bucket.bucketId} style={{ border: "1px solid #eef2f8", borderRadius: 12, padding: 12 }}>
+                            <div key={bucketId || bucket.name} style={{ border: "1px solid #eef2f8", borderRadius: 12, padding: 12 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <div style={{ fontWeight: 700 }}>{bucket.name || bucket.bucketId}</div>
+                                <div style={{ fontWeight: 700 }}>{bucket.name || bucket.bucketId || bucket.id}</div>
                                 {isRecommended && (
                                   <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 11, background: "#dcfce7", color: "#166534" }}>
                                     Recommended
@@ -424,7 +504,7 @@ export default function MyPlan() {
                               )}
                               <div style={{ marginTop: 12 }}>
                                 <a
-                                  href={`/bucket/${bucket.bucketId}?source=model`}
+                                  href={bucketId ? `/bucket/${bucketId}?source=model` : "#"}
                                   style={{
                                     display: "inline-block",
                                     padding: "6px 12px",
