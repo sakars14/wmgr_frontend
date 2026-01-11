@@ -1,0 +1,160 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: var(--gf-bg, #f2f8f7);
+  border-bottom: none;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  width: 100%;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.brandText {
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+.brandLabel {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #111111;
+}
+
+.centerNav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.navLink {
+  text-decoration: none;
+  color: #2d4544;
+  font-weight: 600;
+  position: relative;
+  padding-bottom: 4px;
+}
+
+.navLink:hover {
+  color: var(--accent);
+}
+
+.navLinkActive {
+  color: var(--accent);
+}
+
+.navLinkActive::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.platformToggle {
+  display: inline-flex;
+  background: #e6efef;
+  border: 1px solid rgba(51, 117, 118, 0.25);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.platformButton {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: #2d4544;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.platformActive {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.authButton {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.authButton:hover {
+  background: #2b6460;
+  border-color: #2b6460;
+}
+
+.profile {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: #102f2e;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(51, 117, 118, 0.16);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.profileName {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .centerNav {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .nav {
+    flex-wrap: wrap;
+  }
+
+  .right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

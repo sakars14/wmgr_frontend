@@ -10,10 +10,13 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { RISK_QUESTIONS } from "../lib/riskQuestions";
+import { formatINR, parseINR } from "../lib/money";
+import ConfirmModal from "../components/ConfirmModal";
 
 // --- Meta config ----------------------------------------------------
 
 const STEPS = [
+  { key: "risk",        label: "Risk assessment" },
   { key: "personal",    label: "Personal details" },
   { key: "cashFlow",    label: "Cash flow" },
   { key: "assets",      label: "Assets" },
@@ -21,7 +24,6 @@ const STEPS = [
   { key: "emergency",   label: "Emergency" },
   { key: "insurance",   label: "Insurance" },
   { key: "goals",       label: "Goals" },
-  { key: "risk",        label: "Risk assessment" }, // NEW
 ];
 
 const STEP_INDEX_BY_KEY = STEPS.reduce((acc, step, index) => {
@@ -106,6 +108,10 @@ const CASH_FLOW_FIELDS = [
   { key: "annualLargeExpenses", label: "Annual Large Expenses (yearly)" },
   { key: "totalMonthlyExpense", label: "Total Monthly Expense (excluding EMIs)" },
 ];
+
+const CASH_FLOW_TOTAL_KEYS = CASH_FLOW_FIELDS
+  .map((field) => field.key)
+  .filter((key) => key !== "annualLargeExpenses" && key !== "totalMonthlyExpense");
 
 const ASSET_FIELDS = [
   { key: "selfOccupiedHouse", label: "Self Occupied House" },
@@ -387,6 +393,16 @@ function buildSectionFromFields(fields, source) {
 
 // --- Small reusable components -------------------------------------
 
+function sumFields(values, keys) {
+  return keys.reduce((total, key) => total + parseINR(values?.[key]), 0);
+}
+
+function toDigitString(value) {
+  if (value === null || value === undefined) return "";
+  const digits = String(value).replace(/\D/g, "");
+  return digits;
+}
+
 function OptionCard({ label, selected, onClick }) {
   return (
     <button
@@ -401,20 +417,67 @@ function OptionCard({ label, selected, onClick }) {
   );
 }
 
-function NumberFieldGrid({ fields, values, onChange }) {
+function CurrencyInput({ value, onChange, placeholder, readOnly = false }) {
+  const [focused, setFocused] = useState(false);
+  const rawValue = toDigitString(value);
+  const displayValue = readOnly
+    ? formatINR(rawValue)
+    : focused
+    ? rawValue
+    : formatINR(rawValue);
+
+  const handleChange = (event) => {
+    if (readOnly) return;
+    const digits = event.target.value.replace(/\D/g, "");
+    onChange(digits ? Number(digits) : "");
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      className={styles.input}
+      value={displayValue}
+      onChange={handleChange}
+      onFocus={() => {
+        if (!readOnly) setFocused(true);
+      }}
+      onBlur={() => {
+        if (!readOnly) setFocused(false);
+      }}
+      placeholder={placeholder}
+      readOnly={readOnly}
+      aria-readonly={readOnly}
+    />
+  );
+}
+
+function NumberFieldGrid({
+  fields,
+  values,
+  onChange,
+  computedValues = {},
+  readOnlyKeys = [],
+}) {
   return (
     <div className={styles.grid}>
       {fields.map((f) => (
         <div key={f.key} className={styles.fieldRow}>
           <label className={styles.label}>{f.label}</label>
-          <input
-            type="number"
-            min="0"
-            inputMode="decimal"
-            className={styles.input}
-            value={values[f.key] ?? ""}
-            onChange={(e) => onChange(f.key, e.target.value)}
-          />
+          {(() => {
+            const isReadOnly = readOnlyKeys.includes(f.key);
+            const fieldValue =
+              Object.prototype.hasOwnProperty.call(computedValues, f.key)
+                ? computedValues[f.key]
+                : values[f.key] ?? "";
+            return (
+              <CurrencyInput
+                value={fieldValue}
+                onChange={(value) => onChange(f.key, value)}
+                readOnly={isReadOnly}
+              />
+            );
+          })()}
         </div>
       ))}
     </div>
@@ -475,6 +538,7 @@ export default function Onboarding() {
 
   const [riskAnswers, setRiskAnswers] = useState({});
   const [riskError, setRiskError] = useState("");
+  const [showCloseModal, setShowCloseModal] = useState(false);
   const handleRiskChange = (qName, value) => {
     setRiskAnswers(prev => ({ ...prev, [qName]: value }));
   };
@@ -575,8 +639,8 @@ export default function Onboarding() {
         } else {
           // Normal first-time onboarding mode
           if (snapshot.exists()) {
-            // already onboarded → go to buckets
-            router.replace("/buckets");
+            // already onboarded -> go to profile
+            router.replace("/profile");
           } else {
             setIsExistingProfile(false);
             setLoading(false);
@@ -688,6 +752,7 @@ export default function Onboarding() {
     const unanswered = RISK_QUESTIONS.filter(q => !riskAnswers[q.name]);
     if (unanswered.length > 0) {
       setRiskError("Please answer all risk questions before finishing.");
+      setCurrentStep(stepIndex("risk"));
       return false;
     }
     setRiskError("");
@@ -835,6 +900,10 @@ export default function Onboarding() {
       if (isBlank(normalizedCashFlow.annualLargeExpenses)) {
         normalizedCashFlow.annualLargeExpenses = 0;
       }
+      normalizedCashFlow.totalMonthlyExpense = sumFields(
+        cashFlow,
+        CASH_FLOW_TOTAL_KEYS
+      );
 
       const normalizedAssets = buildSectionFromFields(ASSET_FIELDS, assets);
       const normalizedLiabilities = buildSectionFromFields(LIABILITY_FIELDS_ALL, liabilities);
@@ -910,6 +979,20 @@ export default function Onboarding() {
       setSaving(false);
     }
   }; 
+
+  const handleClose = () => {
+    if (saving) return;
+    setShowCloseModal(true);
+  };
+
+  const handleCloseConfirm = () => {
+    setShowCloseModal(false);
+    router.replace("/profile");
+  };
+
+  const handleCloseCancel = () => {
+    setShowCloseModal(false);
+  };
 
   const taxSlabOptions =
     personal.taxRegime && TAX_SLABS_BY_REGIME[personal.taxRegime]
@@ -1053,14 +1136,10 @@ export default function Onboarding() {
           <label className={styles.label}>
             Monthly income – in hand
           </label>
-          <input
-            type="number"
-            min="0"
-            inputMode="decimal"
-            className={styles.input}
+          <CurrencyInput
             value={personal.monthlyIncomeInHand}
-            onChange={(e) =>
-              updatePersonal("monthlyIncomeInHand", e.target.value)
+            onChange={(value) =>
+              updatePersonal("monthlyIncomeInHand", value)
             }
             placeholder="e.g. 150000"
           />
@@ -1069,53 +1148,37 @@ export default function Onboarding() {
           <label className={styles.label}>
             Annual bonus / incentive
           </label>
-          <input
-            type="number"
-            min="0"
-            inputMode="decimal"
-            className={styles.input}
+          <CurrencyInput
             value={personal.annualBonus}
-            onChange={(e) =>
-              updatePersonal("annualBonus", e.target.value)
+            onChange={(value) =>
+              updatePersonal("annualBonus", value)
             }
           />
         </div>
         <div className={styles.fieldRow}>
           <label className={styles.label}>Passive income</label>
-          <input
-            type="number"
-            min="0"
-            inputMode="decimal"
-            className={styles.input}
+          <CurrencyInput
             value={personal.passiveIncome}
-            onChange={(e) =>
-              updatePersonal("passiveIncome", e.target.value)
+            onChange={(value) =>
+              updatePersonal("passiveIncome", value)
             }
           />
         </div>
         <div className={styles.fieldRow}>
           <label className={styles.label}>Other income 1</label>
-          <input
-            type="number"
-            min="0"
-            inputMode="decimal"
-            className={styles.input}
+          <CurrencyInput
             value={personal.otherIncome1}
-            onChange={(e) =>
-              updatePersonal("otherIncome1", e.target.value)
+            onChange={(value) =>
+              updatePersonal("otherIncome1", value)
             }
           />
         </div>
         <div className={styles.fieldRow}>
           <label className={styles.label}>Other income 2</label>
-          <input
-            type="number"
-            min="0"
-            inputMode="decimal"
-            className={styles.input}
+          <CurrencyInput
             value={personal.otherIncome2}
-            onChange={(e) =>
-              updatePersonal("otherIncome2", e.target.value)
+            onChange={(value) =>
+              updatePersonal("otherIncome2", value)
             }
           />
         </div>
@@ -1180,11 +1243,18 @@ export default function Onboarding() {
         EMIs are captured in Liabilities.
       </p>
 
-      <NumberFieldGrid
-        fields={CASH_FLOW_FIELDS}
-        values={cashFlow}
-        onChange={updateCashFlow}
-      />
+      {(() => {
+        const totalMonthlyExpenses = sumFields(cashFlow, CASH_FLOW_TOTAL_KEYS);
+        return (
+          <NumberFieldGrid
+            fields={CASH_FLOW_FIELDS}
+            values={cashFlow}
+            onChange={updateCashFlow}
+            computedValues={{ totalMonthlyExpense: totalMonthlyExpenses }}
+            readOnlyKeys={["totalMonthlyExpense"]}
+          />
+        );
+      })()}
     </div>
   );
 
@@ -1248,13 +1318,9 @@ export default function Onboarding() {
               (
                 <div key={`${loan.amountKey}-emi`} className={styles.fieldRow}>
                   <label className={styles.label}>{loan.label} EMI</label>
-                  <input
-                    type="number"
-                    min="0"
-                    inputMode="decimal"
-                    className={styles.input}
+                  <CurrencyInput
                     value={liabilities[loan.emiKey] ?? ""}
-                    onChange={(e) => updateLiabilities(loan.emiKey, e.target.value)}
+                    onChange={(value) => updateLiabilities(loan.emiKey, value)}
                   />
                 </div>
               ),
@@ -1313,13 +1379,9 @@ export default function Onboarding() {
         </div>
         <div className={styles.fieldRow}>
           <label className={styles.label}>Dedicated emergency amount</label>
-          <input
-            type="number"
-            min="0"
-            inputMode="decimal"
-            className={styles.input}
+          <CurrencyInput
             value={emergency.dedicatedAmount}
-            onChange={(e) => updateEmergency("dedicatedAmount", e.target.value)}
+            onChange={(value) => updateEmergency("dedicatedAmount", value)}
           />
         </div>
       </div>
@@ -1338,26 +1400,18 @@ export default function Onboarding() {
           (
             <div key={`${entry.key}-cover`} className={styles.fieldRow}>
               <label className={styles.label}>{entry.label}</label>
-              <input
-                type="number"
-                min="0"
-                inputMode="decimal"
-                className={styles.input}
+              <CurrencyInput
                 value={insurance[entry.key] ?? ""}
-                onChange={(e) => updateInsurance(entry.key, e.target.value)}
+                onChange={(value) => updateInsurance(entry.key, value)}
               />
             </div>
           ),
           (
             <div key={`${entry.key}-premium`} className={styles.fieldRow}>
               <label className={styles.label}>{entry.label} premium per year</label>
-              <input
-                type="number"
-                min="0"
-                inputMode="decimal"
-                className={styles.input}
+              <CurrencyInput
                 value={insurance[entry.premiumKey] ?? ""}
-                onChange={(e) => updateInsurance(entry.premiumKey, e.target.value)}
+                onChange={(value) => updateInsurance(entry.premiumKey, value)}
               />
             </div>
           ),
@@ -1380,13 +1434,9 @@ export default function Onboarding() {
             return (
               <div key={entry.key} className={styles.fieldRow}>
                 <label className={styles.label}>{entry.label}</label>
-                <input
-                  type="number"
-                  min="0"
-                  inputMode="decimal"
-                  className={styles.input}
+                <CurrencyInput
                   value={goals[entry.key] ?? ""}
-                  onChange={(e) => updateGoals(entry.key, e.target.value)}
+                  onChange={(value) => updateGoals(entry.key, value)}
                 />
               </div>
             );
@@ -1396,13 +1446,9 @@ export default function Onboarding() {
             (
               <div key={`${entry.key}-amount`} className={styles.fieldRow}>
                 <label className={styles.label}>{entry.label}</label>
-                <input
-                  type="number"
-                  min="0"
-                  inputMode="decimal"
-                  className={styles.input}
+                <CurrencyInput
                   value={goals[entry.key] ?? ""}
-                  onChange={(e) => updateGoals(entry.key, e.target.value)}
+                  onChange={(value) => updateGoals(entry.key, value)}
                 />
               </div>
             ),
@@ -1454,30 +1500,18 @@ export default function Onboarding() {
       {RISK_QUESTIONS.map((q) => (
         <div key={q.name} className={styles.riskQuestionBlock}>
           <h4 className={styles.riskQuestionTitle}>{q.text}</h4>
-          <div className={styles.riskOptionsRow}>
-            {q.options.map(([label, value]) => {
-              const selected = riskAnswers[q.name] === String(value);
-              return (
-                <label
-                  key={label}
-                  className={`${styles.riskOptionPill} ${
-                    selected ? styles.riskOptionPillSelected : ""
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name={q.name}
-                    value={value}
-                    checked={selected}
-                    onChange={(e) =>
-                      handleRiskChange(q.name, e.target.value)
-                    }
-                  />
-                  <span>{label}</span>
-                </label>
-              );
-            })}
-          </div>
+          <select
+            className={styles.select}
+            value={riskAnswers[q.name] ?? ""}
+            onChange={(e) => handleRiskChange(q.name, e.target.value)}
+          >
+            <option value="">Select an option</option>
+            {q.options.map(([label, value]) => (
+              <option key={`${q.name}-${value}`} value={String(value)}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
       ))}
 
@@ -1487,26 +1521,28 @@ export default function Onboarding() {
     </div>
   );
 
+  const currentStepKey = STEPS[currentStep]?.key || "risk";
+
   const renderStepBody = () => {
-    switch (currentStep) {
-      case 0:
-        return renderPersonalStep();
-      case 1:
-        return renderCashFlowStep();
-      case 2:
-        return renderAssetsStep();
-      case 3:
-        return renderLiabilitiesStep();
-      case 4:
-        return renderEmergencyStep();
-      case 5:
-        return renderInsuranceStep();
-      case 6:
-        return renderGoalsStep();
-      case 7:
+    switch (currentStepKey) {
+      case "risk":
         return renderRiskStep();
-      default:
+      case "personal":
         return renderPersonalStep();
+      case "cashFlow":
+        return renderCashFlowStep();
+      case "assets":
+        return renderAssetsStep();
+      case "liabilities":
+        return renderLiabilitiesStep();
+      case "emergency":
+        return renderEmergencyStep();
+      case "insurance":
+        return renderInsuranceStep();
+      case "goals":
+        return renderGoalsStep();
+      default:
+        return renderRiskStep();
     }
   };
 
@@ -1525,10 +1561,6 @@ export default function Onboarding() {
         {/* Left side stepper / copy */}
         <aside className={styles.leftPane}>
           <div>
-            <div className={styles.logoRow}>
-              <div className={styles.logoDot} />
-              <span className={styles.logoText}>Growfolio</span>
-            </div>
             <h1 className={styles.leftHeading}>
               Set up your{" "}
               <span className={styles.highlight}>money profile</span>
@@ -1601,31 +1633,54 @@ export default function Onboarding() {
           {renderStepBody()}
 
           <div className={styles.navButtons}>
-            {currentStep > 0 && (
+            <div className={styles.navGroup}>
+              <button
+                type="button"
+                className={styles.ghostButton}
+                onClick={handleClose}
+                disabled={saving}
+              >
+                Close
+              </button>
               <button
                 type="button"
                 className={styles.secondaryButton}
                 onClick={goBack}
-                disabled={saving}
+                disabled={saving || currentStep === 0}
               >
                 Back
               </button>
-            )}
-            <button
-              type="button"
-              className={styles.primaryButton}
-              onClick={isLastStep ? handleSubmit : goNext}
-              disabled={saving}
-            >
-              {isLastStep
-                ? saving
-                  ? "Saving…"
-                  : "Finish"
-                : "Next"}
-            </button>
+            </div>
+            <div className={styles.navGroup}>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={handleSubmit}
+                disabled={saving}
+              >
+                {saving ? "Saving..." : "Submit"}
+              </button>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={goNext}
+                disabled={saving || isLastStep}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </main>
       </div>
+      <ConfirmModal
+        open={showCloseModal}
+        title="Exit onboarding?"
+        message="Your unsaved changes will be lost."
+        confirmLabel="Exit"
+        cancelLabel="Cancel"
+        onConfirm={handleCloseConfirm}
+        onCancel={handleCloseCancel}
+      />
     </div>
   );
 }

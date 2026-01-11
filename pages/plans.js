@@ -78,6 +78,7 @@ async function loadRazorpayScript() {
 
 export default function PlansPage() {
   const router = useRouter();
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [recommendedPlanId, setRecommendedPlanId] = useState(null);
@@ -98,6 +99,23 @@ export default function PlansPage() {
 
       setUser(u);
       try {
+        try {
+          const token = await u.getIdToken();
+          const res = await fetch(`${API_BASE}/dev/whoami`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+          const raw = data?.is_admin;
+          const isAdmin = Array.isArray(raw) ? !!raw[0] : !!raw;
+          if (!isAdmin) {
+            router.replace("/profile");
+            return;
+          }
+        } catch (adminErr) {
+          router.replace("/profile");
+          return;
+        }
+
         const ref = doc(db, "clientProfiles", u.uid);
         const snap = await getDoc(ref);
         if (snap.exists()) {
@@ -146,7 +164,7 @@ export default function PlansPage() {
     });
 
     return () => unsub();
-  }, [router]);
+  }, [router, API_BASE]);
 
   const formatTimestamp = (ts) => {
     if (!ts) return "";

@@ -1,171 +1,118 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import { auth, db } from "../lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import styles from "../styles/ProfilePage.module.css";
+import { formatINR, parseINR } from "../lib/money";
+import { fetchZerodhaStatus } from "../lib/zerodhaStatus";
 
-const INFO_TABS = [
-  { key: "overview", label: "Overview" },
-  { key: "cashFlow", label: "Expenses" },
-  { key: "assets", label: "Investments" },
-  { key: "liabilities", label: "Liabilities" },
-  { key: "insurance", label: "Insurance" },
-  { key: "goals", label: "Goals" },
-  { key: "risk", label: "Risk profile" },
+const CASH_FLOW_TOTAL_KEYS = [
+  "rent",
+  "maintainence",
+  "groceries",
+  "utilities",
+  "health",
+  "gymPersonalCare",
+  "dinningOut",
+  "fuel",
+  "houseHelp",
+  "entertainment",
+  "parentsExpense",
+  "miscExpense",
+  "others",
 ];
 
-// These field lists mirror your onboarding / Excel structure.
-// If some key names differ, just tweak the key values.
-const CASH_FLOW_FIELDS = [
-  { key: "rent", label: "Rent" },
-  { key: "maintainence", label: "Maintainence" },
-  { key: "groceries", label: "Groceries" },
-  { key: "utilities", label: "Utilities" },
-  { key: "health", label: "Health" },
-  { key: "gymPersonalCare", label: "Gym / Personal care" },
-  { key: "dinningOut", label: "Dining Out" },
-  { key: "fuel", label: "Fuel" },
-  { key: "houseHelp", label: "House Help" },
-  { key: "entertainment", label: "Entertainment" },
-  { key: "parentsExpense", label: "Parents Expense" },
-  { key: "miscExpense", label: "Misc Expense" },
-  { key: "others", label: "Others" },
-  { key: "annualLargeExpenses", label: "Annual Large Expenses (yearly)" },
-  { key: "totalMonthlyExpense", label: "Total Monthly Expense (excluding EMIs)" },
+const ASSET_TOTAL_KEYS = [
+  "selfOccupiedHouse",
+  "house2",
+  "bankBalance1",
+  "bankBalance2",
+  "directEquity",
+  "equityMf",
+  "debtMf",
+  "bonds",
+  "goldSilver",
+  "esops",
+  "reit",
+  "realEstate",
+  "pms",
+  "aif",
+  "crypto",
+  "startupInvestments",
+  "fds",
+  "rds",
+  "postOfficeSchemes",
+  "ppf",
+  "nps",
+  "traditionalInsurance",
+  "vehicle",
+  "rentalDeposit",
+  "others",
 ];
 
-const ASSET_FIELDS = [
-  { key: "selfOccupiedHouse", label: "Self Occupied House" },
-  { key: "house2", label: "House 2" },
-  { key: "bankBalance1", label: "Bank Balance 1" },
-  { key: "bankBalance2", label: "Bank Balance 2" },
-  { key: "directEquity", label: "Direct Equity" },
-  { key: "equityMf", label: "Equity MF" },
-  { key: "debtMf", label: "Debt MF" },
-  { key: "bonds", label: "Bonds" },
-  { key: "goldSilver", label: "Gold / Silver" },
-  { key: "esops", label: "ESOPs" },
-  { key: "reit", label: "REIT" },
-  { key: "realEstate", label: "Real Estate" },
-  { key: "pms", label: "PMS" },
-  { key: "aif", label: "AIF" },
-  { key: "crypto", label: "Crypto" },
-  { key: "startupInvestments", label: "Startup Investments" },
-  { key: "fds", label: "FDs" },
-  { key: "rds", label: "RDs" },
-  { key: "postOfficeSchemes", label: "Post Office Schemes" },
-  { key: "ppf", label: "PPF" },
-  { key: "nps", label: "NPS" },
-  { key: "traditionalInsurance", label: "Traditional Insurance" },
-  { key: "vehicle", label: "Vehicle" },
-  { key: "rentalDeposit", label: "Rental Deposit" },
-  { key: "others", label: "Others" },
-  { key: "totalAsset", label: "Total Asset" },
+const LIABILITY_TOTAL_KEYS = [
+  "houseLoan1",
+  "houseLoan2",
+  "loanAgainstShares",
+  "personalLoan1",
+  "personalLoan2",
+  "creditCard1",
+  "creditCard2",
+  "vehicleLoan",
+  "others",
 ];
 
-const CONTRIBUTION_FIELDS = [
-  { key: "sipEquityMfMonthly", label: "Equity MF SIP (per month)" },
-  { key: "sipDebtMfMonthly", label: "Debt MF SIP (per month)" },
-  { key: "sipDirectEquityMonthly", label: "Direct Stocks SIP (per month)" },
-  { key: "ppfMonthly", label: "PPF (per month)" },
-  { key: "npsMonthly", label: "NPS (per month)" },
-  { key: "epfMonthly", label: "EPF (per month)" },
-  { key: "otherInvestMonthly", label: "Other Investments (per month)" },
+const CASH_KEYS = ["bankBalance1", "bankBalance2"];
+const LOAN_KEYS = [
+  "houseLoan1",
+  "houseLoan2",
+  "loanAgainstShares",
+  "personalLoan1",
+  "personalLoan2",
+  "vehicleLoan",
 ];
-
-const EMERGENCY_FIELDS = [
-  { key: "monthsTarget", label: "Target Months of Expenses" },
-  { key: "dedicatedAmount", label: "Dedicated Emergency Amount" },
-];
-
-const LIABILITY_FIELDS = [
-  { key: "houseLoan1", label: "House Loan 1" },
-  { key: "houseLoan2", label: "House Loan 2" },
-  { key: "loanAgainstShares", label: "Loan Against Shares" },
-  { key: "personalLoan1", label: "Personal Loan 1" },
-  { key: "personalLoan2", label: "Personal Loan 2" },
-  { key: "creditCard1", label: "Credit Card 1" },
-  { key: "creditCard2", label: "Credit Card 2" },
-  { key: "vehicleLoan", label: "Vehicle Loan" },
-  { key: "others", label: "Others" },
-  { key: "totalOutstanding", label: "Total Outstanding" },
-];
-
-const INSURANCE_FIELDS = [
-  { key: "termPolicyClient", label: "Term Policy - Client" },
-  { key: "officeHealthInsuranceClient", label: "Office Health - Client" },
-  { key: "personalHealthBaseInsuranceClient", label: "Personal Health Base - Client" },
-  { key: "superTopUpHealthInsuranceClient", label: "Super Top-up Health - Client" },
-  { key: "termPolicySpouse", label: "Term Policy - Spouse" },
-  { key: "officeHealthInsuranceSpouse", label: "Office Health - Spouse" },
-  { key: "personalHealthBaseInsuranceSpouse", label: "Personal Health Base - Spouse" },
-  { key: "superTopUpHealthInsuranceSpouse", label: "Super Top-up Health - Spouse" },
-  { key: "otherPolicy", label: "Other Policy" },
-];
-
-const INSURANCE_PREMIUM_FIELDS = INSURANCE_FIELDS.map((field) => ({
-  key: `${field.key}PremiumPerYear`,
-  label: `${field.label} Premium per year`,
-}));
-
-const INSURANCE_FIELDS_EXTENDED = [
-  ...INSURANCE_FIELDS,
-  ...INSURANCE_PREMIUM_FIELDS,
-];
-
-const GOAL_FIELDS = [
-  { key: "child1UnderGraduateEducation", label: "Child 1 UG Education" },
-  { key: "child2UnderGraduateEducation", label: "Child 2 UG Education" },
-  { key: "child1PostGraduateEducation", label: "Child 1 PG Education" },
-  { key: "child2PostGraduateEducation", label: "Child 2 PG Education" },
-  { key: "child1Marriage", label: "Child 1 Marriage" },
-  { key: "child2Marriage", label: "Child 2 Marriage" },
-  { key: "retirement", label: "Retirement" },
-  { key: "house", label: "House" },
-  { key: "startBusiness", label: "Start Business" },
-  { key: "car", label: "Car" },
-  { key: "gold", label: "Gold" },
-  { key: "vacation", label: "Vacation" },
-  { key: "others", label: "Others" },
-  { key: "totalGoalValue", label: "Total Goal Value" },
-];
-
-const GOAL_FIELDS_EXTENDED = GOAL_FIELDS.flatMap((field) => {
-  if (field.key === "totalGoalValue") {
-    return [field];
-  }
-  return [
-    field,
-    { key: `${field.key}HorizonYears`, label: `${field.label} Horizon (years)` },
-    { key: `${field.key}Priority`, label: `${field.label} Priority` },
-  ];
-});
+const CARD_KEYS = ["creditCard1", "creditCard2"];
 
 const PROFESSION_LABELS = {
-    salaried: "Salaried",
-    selfEmployed: "Self-employed",
-    businessOwner: "Business owner",
-    student: "Student",
-    retired: "Retired",
-    other: "Other",
-  };  
+  salaried: "Salaried",
+  selfEmployed: "Self-employed",
+  businessOwner: "Business owner",
+  student: "Student",
+  retired: "Retired",
+  other: "Other",
+};
 
-function SectionGrid({ title, fields, values }) {
-  return (
-    <section className={styles.section}>
-      <h3 className={styles.sectionTitle}>{title}</h3>
-      <div className={styles.grid}>
-        {fields.map((f) => (
-          <div key={f.key} className={styles.fieldRow}>
-            <div className={styles.label}>{f.label}</div>
-            <div className={styles.value}>
-              {values && values[f.key] ? values[f.key] : "—"}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
+function sumFields(values, keys) {
+  return keys.reduce((total, key) => total + parseINR(values?.[key]), 0);
+}
+
+function buildTrendSeries(baseValue, points = 40) {
+  const base = Number.isFinite(baseValue) && baseValue > 0 ? baseValue : 1000000;
+  const series = [];
+  for (let i = 0; i < points; i += 1) {
+    const phase = (i / (points - 1)) * Math.PI * 2;
+    const variation = 0.02 * Math.sin(phase) + 0.012 * Math.cos(phase * 2);
+    series.push(Math.max(0, Math.round(base * (1 + variation))));
+  }
+  return series;
+}
+
+function buildSparklinePath(values, width, height, padding = 2) {
+  if (!values.length) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const step = (width - padding * 2) / (values.length - 1);
+
+  return values
+    .map((value, index) => {
+      const x = padding + index * step;
+      const y =
+        height - padding - ((value - min) / range) * (height - padding * 2);
+      return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
 }
 
 export default function ProfilePage() {
@@ -173,43 +120,91 @@ export default function ProfilePage() {
     process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080";
   const router = useRouter();
   const [profile, setProfile] = useState(null);
-  const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [authUser, setAuthUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
   const [planShared, setPlanShared] = useState(false);
   const [planGeneratedAt, setPlanGeneratedAt] = useState(null);
   const [clarifyingQuestions, setClarifyingQuestions] = useState([]);
+  const [recentInvestments, setRecentInvestments] = useState([]);
+  const [investmentsLoading, setInvestmentsLoading] = useState(false);
+  const [investmentsError, setInvestmentsError] = useState("");
 
   const [riskLabel, setRiskLabel] = useState("");
   const [riskScore, setRiskScore] = useState(null);
   const [missingInfoNote, setMissingInfoNote] = useState("");
+  const [zerodhaStatus, setZerodhaStatus] = useState({
+    connected: false,
+    updatedAt: null,
+  });
 
   useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user || null);
+      setAuthReady(true);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!authReady) return;
+    if (!authUser) {
+      router.replace("/login");
+    }
+  }, [authReady, authUser, router]);
+
+  useEffect(() => {
+    const loadRecentInvestments = async (token) => {
+      try {
+        setInvestmentsLoading(true);
+        setInvestmentsError("");
+        const res = await fetch(`${API_BASE}/investments/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.detail || "Failed to load investments");
+        }
+        const rows = Array.isArray(data)
+          ? data
+          : data?.items || data?.investments || [];
+        setRecentInvestments(rows.slice(0, 3));
+      } catch (err) {
+        console.error("Failed to load recent investments", err);
+        setInvestmentsError("Could not load recent investments.");
+        setRecentInvestments([]);
+      } finally {
+        setInvestmentsLoading(false);
+      }
+    };
+
+    const loadZerodhaStatus = async (token) => {
+      try {
+        const status = await fetchZerodhaStatus(API_BASE, token);
+        setZerodhaStatus(status);
+      } catch (err) {
+        setZerodhaStatus({ connected: false, updatedAt: null });
+      }
+    };
+
     async function loadProfileAndPlan() {
+      if (!authUser) return;
       setLoading(true);
-      // If a previous attempt failed, clear the banner before trying again
       setError("");
       setNotice("");
 
       try {
-        const user = auth.currentUser;
-        if (!user) {
-          setError("Please sign in first.");
-          setLoading(false);
-          return;
-        }
+        const user = authUser;
 
-        // Always define both names so we never crash with "idToken is not defined"
-        // (some older code paths / fast-refresh bundles may still reference it).
         const idToken = await user.getIdToken();
         const token = idToken;
 
         const ref = doc(db, "clientProfiles", user.uid);
         const snap = await getDoc(ref);
         if (!snap.exists()) {
-          // If somehow profile missing, send back to onboarding
           router.replace("/onboarding");
           return;
         }
@@ -219,10 +214,10 @@ export default function ProfilePage() {
         if (rq.totalScore != null) setRiskScore(rq.totalScore);
         setProfile(data);
 
-        // Check share flag via backend (avoids Firestore client rules errors)
         await refreshPlanShared({ uid: user.uid, token, idToken });
+        loadRecentInvestments(token);
+        loadZerodhaStatus(token);
 
-        // Successful load => ensure banner stays cleared
         setError("");
       } catch (e) {
         console.error("Failed to load profile", e);
@@ -234,7 +229,7 @@ export default function ProfilePage() {
 
     const refreshPlanShared = async ({ uid, token, idToken } = {}) => {
       try {
-        const currentUser = auth.currentUser;
+        const currentUser = authUser;
         if (!currentUser || !uid) {
           setPlanShared(false);
           return;
@@ -251,7 +246,6 @@ export default function ProfilePage() {
         }
         const data = await res.json();
         setPlanShared(!!data.shared);
-        // Use backend as source-of-truth (avoids Firestore permission noise on profile page)
         setPlanGeneratedAt(data.generatedAt ? new Date(data.generatedAt) : null);
       } catch (err) {
         console.error("Failed to load plan share flag", err);
@@ -260,13 +254,17 @@ export default function ProfilePage() {
       }
     };
 
+    if (!authReady || !authUser) return;
     loadProfileAndPlan();
-    const poll = setInterval(() => refreshPlanShared({ uid: auth.currentUser?.uid }), 4000);
+    const poll = setInterval(
+      () => refreshPlanShared({ uid: authUser?.uid }),
+      4000
+    );
 
     return () => {
       clearInterval(poll);
     };
-  }, [router]);
+  }, [router, authReady, authUser, API_BASE]);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -294,10 +292,101 @@ export default function ProfilePage() {
     return "";
   };
 
-  if (loading) {
+  const formatInvestmentDate = (value) => {
+    if (!value) return "-";
+    if (typeof value === "string" || typeof value === "number") {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString();
+    }
+    if (typeof value.seconds === "number") {
+      return new Date(value.seconds * 1000).toLocaleDateString();
+    }
+    if (typeof value._seconds === "number") {
+      return new Date(value._seconds * 1000).toLocaleDateString();
+    }
+    return "-";
+  };
+
+  const safeProfile = profile || {};
+  const personal = safeProfile.personal || {};
+  const assets = safeProfile.assets || {};
+  const liabilities = safeProfile.liabilities || {};
+  const cashFlow = safeProfile.cashFlow || {};
+  const emergency = safeProfile.emergency || {};
+
+  const firstName =
+    (personal.name || "").trim().split(/\s+/)[0] ||
+    (auth.currentUser?.email || "").split("@")[0];
+
+  const initials = firstName ? firstName[0].toUpperCase() : "?";
+  const displayName = personal.name || firstName || "User";
+
+  const totalAssets =
+    parseINR(assets.totalAsset) || sumFields(assets, ASSET_TOTAL_KEYS);
+  const totalLiabilities =
+    parseINR(liabilities.totalOutstanding) ||
+    sumFields(liabilities, LIABILITY_TOTAL_KEYS);
+
+  const bankTotal = sumFields(assets, CASH_KEYS);
+  const emergencyTotal = parseINR(emergency.dedicatedAmount);
+  const totalCash = bankTotal + emergencyTotal;
+
+  const expensesMonthly =
+    parseINR(cashFlow.totalMonthlyExpense) ||
+    sumFields(cashFlow, CASH_FLOW_TOTAL_KEYS);
+  const incomeMonthly =
+    parseINR(personal.monthlyIncomeInHand) +
+    parseINR(personal.passiveIncome) +
+    parseINR(personal.otherIncome1) +
+    parseINR(personal.otherIncome2) +
+    Math.round(parseINR(personal.annualBonus) / 12);
+  const surplus = incomeMonthly - expensesMonthly;
+
+  const loanTotal = sumFields(liabilities, LOAN_KEYS);
+  const cardTotal = sumFields(liabilities, CARD_KEYS);
+  const otherLiabilities = parseINR(liabilities.others);
+
+  const netWorth = totalCash + totalAssets - totalLiabilities;
+  const historyRaw =
+    safeProfile.netWorthHistory ||
+    safeProfile.netWorthSeries ||
+    safeProfile.netWorthTrend;
+  const history = Array.isArray(historyRaw) ? historyRaw : [];
+
+  const netWorthSeries = useMemo(() => {
+    if (history.length > 1) {
+      return history.map((value) => parseINR(value));
+    }
+    // TODO: Replace with real netWorthHistory from backend.
+    return buildTrendSeries(netWorth);
+  }, [history, netWorth]);
+
+  const sparklinePath = buildSparklinePath(netWorthSeries, 120, 36);
+  const netWorthChange =
+    netWorthSeries.length > 1
+      ? netWorthSeries[netWorthSeries.length - 1] - netWorthSeries[0]
+      : 0;
+  const netWorthChangePct =
+    netWorthSeries.length > 1 && netWorthSeries[0]
+      ? (netWorthChange / netWorthSeries[0]) * 100
+      : 0;
+  const netWorthChangeText = `${netWorthChange >= 0 ? "+" : "-"}${formatINR(
+    Math.abs(netWorthChange)
+  )}`;
+  const netWorthChangePctText = `${netWorthChange >= 0 ? "+" : "-"}${Math.abs(
+    netWorthChangePct
+  ).toFixed(1)}%`;
+
+  const savingsRate =
+    incomeMonthly > 0 ? Math.round((surplus / incomeMonthly) * 100) : 0;
+  const zerodhaConnected = zerodhaStatus?.connected === true;
+
+  const authLoading = !authReady || (authReady && !authUser);
+
+  if (authLoading || loading) {
     return (
       <div className={styles.fullPageCenter}>
-        <div className={styles.loader}>Loading profile…</div>
+        <div className={styles.loader}>Loading profile...</div>
       </div>
     );
   }
@@ -306,424 +395,229 @@ export default function ProfilePage() {
     return null;
   }
 
-  const personal = profile.personal || {};
-  const firstName =
-    (personal.name || "").trim().split(/\s+/)[0] ||
-    (auth.currentUser?.email || "").split("@")[0];
-
-  const initials = firstName ? firstName[0].toUpperCase() : "?";
-
-  const overviewCards = [
-    { label: "Total Assets", value: profile.assets?.totalAsset },
-    { label: "Total Liabilities", value: profile.liabilities?.totalOutstanding },
-    { label: "Monthly Expenses", value: profile.cashFlow?.totalMonthlyExpense },
-    { label: "Total Goal Value", value: profile.goals?.totalGoalValue },
-  ];
-
-  const renderRightPane = () => {
-    if (activeTab === "overview") {
-      return (
-        <>
-          <section className={styles.headerRow}>
-            <div className={styles.avatar}>
-              <span>{initials}</span>
-            </div>
-            <div>
-              <h1 className={styles.name}>{personal.name || firstName}</h1>
-              <p className={styles.subline}>
-                {personal.city || "City not set"}
-              </p>
-              <p className={styles.sublineSmall}>
-                {auth.currentUser?.email}
-              </p>
-            </div>
-            <div className={styles.headerActions}>
-              <button
-                type="button"
-                className={styles.secondaryButton}
-                onClick={() => router.push("/onboarding?mode=edit")}
-              >
-                Edit details
-              </button>
-            </div>
-          </section>
-
-          <section className={styles.section}>
-            <h3 className={styles.sectionTitle}>Snapshot</h3>
-            <div className={styles.cardsRow}>
-              {overviewCards.map((c) => (
-                <div key={c.label} className={styles.metricCard}>
-                  <div className={styles.metricLabel}>{c.label}</div>
-                  <div className={styles.metricValue}>
-                    {c.value ? c.value : "—"}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className={styles.section}>
-  <h3 className={styles.sectionTitle}>Personal details</h3>
-  <div className={styles.grid}>
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Name</div>
-      <div className={styles.value}>{personal.name || "—"}</div>
-    </div>
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Age</div>
-      <div className={styles.value}>{personal.age || "—"}</div>
-    </div>
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Retirement age</div>
-      <div className={styles.value}>{personal.retirementAge || "ƒ?"}</div>
-    </div>
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Dependents count</div>
-      <div className={styles.value}>{personal.dependentsCount || "ƒ?"}</div>
-    </div>
-
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>City</div>
-      <div className={styles.value}>{personal.city || "—"}</div>
-    </div>
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Profession</div>
-      <div className={styles.value}>
-        {PROFESSION_LABELS[personal.professionType] ||
-          personal.professionType ||
-          "—"}
-      </div>
-    </div>
-
-    {personal.professionType === "other" && personal.professionOther && (
-      <div className={styles.fieldRow}>
-        <div className={styles.label}>Profession details</div>
-        <div className={styles.value}>
-          {personal.professionOther || "—"}
-        </div>
-      </div>
-    )}
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Risk tolerance (self)</div>
-      <div className={styles.value}>{personal.riskToleranceSelf || "ƒ?"}</div>
-    </div>
-
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Tax regime</div>
-      <div className={styles.value}>{personal.taxRegime || "—"}</div>
-    </div>
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Tax slab</div>
-      <div className={styles.value}>{personal.taxSlab || "—"}</div>
-    </div>
-  </div>
-</section>
-
-<section className={styles.section}>
-  <h3 className={styles.sectionTitle}>Income (annual)</h3>
-  <div className={styles.grid}>
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Monthly income – in hand</div>
-      <div className={styles.value}>
-        {personal.monthlyIncomeInHand || "—"}
-      </div>
-    </div>
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Annual bonus / incentive</div>
-      <div className={styles.value}>
-        {personal.annualBonus || "—"}
-      </div>
-    </div>
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Passive income</div>
-      <div className={styles.value}>
-        {personal.passiveIncome || "—"}
-      </div>
-    </div>
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Other income 1</div>
-      <div className={styles.value}>
-        {personal.otherIncome1 || "—"}
-      </div>
-    </div>
-
-    <div className={styles.fieldRow}>
-      <div className={styles.label}>Other income 2</div>
-      <div className={styles.value}>
-        {personal.otherIncome2 || "—"}
-      </div>
-    </div>
-  </div>
-</section>
-
-<section className={styles.section}>
-  <h3 className={styles.sectionTitle}>Emergency fund</h3>
-  <div className={styles.grid}>
-    {EMERGENCY_FIELDS.map((f) => (
-      <div key={f.key} className={styles.fieldRow}>
-        <div className={styles.label}>{f.label}</div>
-        <div className={styles.value}>
-          {profile.emergency && String(profile.emergency[f.key] ?? "") !== ""
-            ? profile.emergency[f.key]
-            : "ƒ?"}
-        </div>
-      </div>
-    ))}
-  </div>
-</section>
-
-<section className={styles.section}>
-  <h3 className={styles.sectionTitle}>Monthly contributions</h3>
-  <div className={styles.grid}>
-    {CONTRIBUTION_FIELDS.map((f) => (
-      <div key={f.key} className={styles.fieldRow}>
-        <div className={styles.label}>{f.label}</div>
-        <div className={styles.value}>
-          {profile.contributions && String(profile.contributions[f.key] ?? "") !== ""
-            ? profile.contributions[f.key]
-            : "ƒ?"}
-        </div>
-      </div>
-    ))}
-  </div>
-</section>
-
-
-        </>
-      );
-    }
-
-    if (activeTab === "cashFlow") {
-      return (
-        <SectionGrid
-          title="Monthly expenses"
-          fields={CASH_FLOW_FIELDS}
-          values={profile.cashFlow || {}}
-        />
-      );
-    }
-
-    if (activeTab === "assets") {
-      return (
-        <SectionGrid
-          title="Investments & assets"
-          fields={ASSET_FIELDS}
-          values={profile.assets || {}}
-        />
-      );
-    }
-
-    if (activeTab === "liabilities") {
-      return (
-        <SectionGrid
-          title="Loans & liabilities"
-          fields={LIABILITY_FIELDS}
-          values={profile.liabilities || {}}
-        />
-      );
-    }
-
-    if (activeTab === "insurance") {
-      return (
-        <SectionGrid
-          title="Insurance coverage"
-          fields={INSURANCE_FIELDS_EXTENDED}
-          values={profile.insurance || {}}
-        />
-      );
-    }
-
-    if (activeTab === "goals") {
-      return (
-        <SectionGrid
-          title="Financial goals"
-          fields={GOAL_FIELDS_EXTENDED}
-          values={profile.goals || {}}
-        />
-      );
-    }
-
-    if (activeTab === "risk") {
-        const rq = profile.riskQuiz || {};
-        return (
-          <section className={styles.section}>
-            <h3 className={styles.sectionTitle}>Risk profile</h3>
-            <p className={styles.sectionSubtitle}>
-              Based on your questionnaire, you are classified as{" "}
-              {rq.riskLabel || "—"} investor with a score of{" "}
-              {rq.totalScore != null ? rq.totalScore : "—"}.
-            </p>
-          </section>
-        );
-    }
-
-    return null;
-  };
-
   return (
-    <div className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <div className={styles.sidebarSection}>
-          <div className={styles.sidebarLabel}>GENERAL</div>
-          <nav className={styles.sidebarNav}>
-            <button
-              type="button"
-              className={styles.sidebarItem}
-              onClick={() => router.push("/buckets")}
+    <div className={styles.page}>
+      <header className={styles.pageHeader}>
+        <div className={styles.headerTitleRow}>
+          <h2>Profile</h2>
+          {riskLabel && (
+            <span
+              className={`${styles.riskChip} ${
+                styles["risk-" + riskLabel.toLowerCase()]
+              }`}
             >
-              Buckets
-            </button>
-            <button
-              type="button"
-              className={styles.sidebarItem}
-              onClick={() => router.push("/admin")}
-            >
-              Admin
-            </button>
-          </nav>
+              {riskLabel} investor
+              {riskScore != null && (
+                <span className={styles.riskScore}> Score {riskScore}</span>
+              )}
+            </span>
+          )}
         </div>
+      </header>
 
-        <div className={styles.sidebarSection}>
-          <div className={styles.sidebarLabel}>MY INFO</div>
-          <nav className={styles.sidebarNav}>
-            {INFO_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`${styles.sidebarItem} ${
-                  activeTab === tab.key ? styles.sidebarItemActive : ""
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
+      {notice && (
+        <div className={styles.notice}>{notice}</div>
+      )}
 
-        <div className={styles.sidebarSection}>
-          <div className={styles.sidebarLabel}>MANAGE</div>
-          <nav className={styles.sidebarNav}>
-            <button
-              type="button"
-              className={styles.sidebarItem}
-              onClick={() => router.push("/plans")}
-            >
-              Plans &amp; billing
-            </button>
-            {planShared && (
-              <button
-                type="button"
-                className={styles.sidebarItem}
-                onClick={() => router.push("/my-plan")}
-              >
-                View my plan
-              </button>
-            )}
-
-            <button
-              type="button"
-              className={styles.sidebarItem}
-              onClick={() => router.push("/support")}
-            >
-              Support
-            </button>
-          </nav>
-        </div>
-      </aside>
-
-      <main className={styles.mainPane}>
-        <header className={styles.mainHeader}>
-          <div className={styles.headerTitleRow}>
-            <h2>Profile</h2>
-            {riskLabel && (
-              <span
-                className={`${styles.riskChip} ${
-                  styles["risk-" + riskLabel.toLowerCase()]
-                }`}
-              >
-                {riskLabel} investor
-                {riskScore != null && (
-                  <span className={styles.riskScore}>
-                    {" "}
-                    · Score {riskScore}
-                  </span>
-                )}
-              </span>
-            )}
-          </div>
-        </header>
-
-        {notice && (
-          <div
-            style={{
-              marginBottom: 12,
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid #fdba74",
-              background: "#fff7ed",
-              color: "#9a3412",
-            }}
-          >
-            {notice}
-          </div>
-        )}
-
-        {!!clarifyingQuestions.length && (
-          <section className={styles.section}>
-            <div className={styles.metricCard}>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>
-                Missing info to finalize your plan
-              </div>
-              <ul style={{ margin: "8px 0 12px 18px", color: "#374151" }}>
-                {clarifyingQuestions.map((item) => (
-                  <li key={item.id || item.question} style={{ marginBottom: 8 }}>
-                    <div style={{ fontWeight: 600 }}>{item.question}</div>
-                    <div style={{ fontSize: 12, color: "#6b7280" }}>
-                      {item.whyItMatters}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+      {!!clarifyingQuestions.length && (
+        <section className={styles.section}>
+          <div className={styles.metricCard}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>
+              Missing info to finalize your plan
+            </div>
+            <ul style={{ margin: "8px 0 12px 18px", color: "#374151" }}>
+              {clarifyingQuestions.map((item) => (
+                <li key={item.id || item.question} style={{ marginBottom: 8 }}>
+                  <div style={{ fontWeight: 600 }}>{item.question}</div>
+                  <div style={{ fontSize: 12, color: "#6b7280" }}>
+                    {item.whyItMatters}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>
+              Once you update and resubmit, your plan will regenerate and go for review.
+            </div>
+            {planGeneratedAt && (
               <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>
-                Once you update and resubmit, your plan will regenerate and go for review.
+                Last generated: {formatTimestamp(planGeneratedAt)}
               </div>
-              {planGeneratedAt && (
-                <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>
-                  Last generated: {formatTimestamp(planGeneratedAt)}
-                </div>
-              )}
-              {missingInfoNote && (
-                <div style={{ fontSize: 12, color: "#9a3412", marginBottom: 8 }}>
-                  {missingInfoNote}
-                </div>
-              )}
+            )}
+            {missingInfoNote && (
+              <div style={{ fontSize: 12, color: "#9a3412", marginBottom: 8 }}>
+                {missingInfoNote}
+              </div>
+            )}
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={handleUpdateDetails}
+            >
+              Update details
+            </button>
+          </div>
+        </section>
+      )}
+
+      {error && <div className={styles.error}>{error}</div>}
+
+      <div className={styles.layout}>
+        <aside className={styles.profileCard}>
+          <div className={styles.profileHeader}>
+            <div className={styles.avatar}>{initials}</div>
+            <div>
+              <div className={styles.name}>{displayName}</div>
+              <div className={styles.metaText}>{auth.currentUser?.email || ""}</div>
+            </div>
+          </div>
+          <div className={styles.metaBlock}>
+            <div className={styles.metaRow}>
+              <span>City</span>
+              <span>{personal.city || "-"}</span>
+            </div>
+            <div className={styles.metaRow}>
+              <span>Profession</span>
+              <span>
+                {PROFESSION_LABELS[personal.professionType] ||
+                  personal.professionType ||
+                  "-"}
+              </span>
+            </div>
+            <div className={styles.connectionRow}>
+              <span>Accounts</span>
+              <span>
+                Zerodha • {zerodhaConnected ? "Connected" : "Not connected"}
+              </span>
+            </div>
+            <div className={styles.connectionHint}>BSE MFU • Coming soon</div>
+          </div>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={() => router.push("/onboarding?mode=edit")}
+          >
+            Edit profile
+          </button>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={() => router.push("/my-plan")}
+          >
+            View my plan
+          </button>
+        </aside>
+
+        <div className={styles.rightPane}>
+          <section className={styles.kpiGrid}>
+            <div className={styles.kpiCard}>
+              <div className={styles.kpiLabel}>Net Worth</div>
+              <div className={styles.kpiValue}>{formatINR(netWorth)}</div>
+              <div className={styles.sparkline}>
+                <svg
+                  className={styles.sparklineSvg}
+                  viewBox="0 0 120 36"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <title>
+                    Net worth trend (last 90 days). Demo/illustration until live data is connected.
+                  </title>
+                  <path d={sparklinePath} className={styles.sparklinePath} />
+                </svg>
+              </div>
+              <div className={styles.trendMeta}>
+                90-day change: {netWorthChangeText} ({netWorthChangePctText})
+              </div>
+              <div className={styles.kpiBreakdown}>
+                <div>Cash: {formatINR(totalCash)}</div>
+                <div>Assets: {formatINR(totalAssets)}</div>
+                <div>Liabilities: {formatINR(totalLiabilities)}</div>
+              </div>
+            </div>
+
+            <div className={styles.kpiCard}>
+              <div className={styles.kpiLabel}>Total Cash</div>
+              <div className={styles.kpiValue}>{formatINR(totalCash)}</div>
+              <div className={styles.kpiBreakdown}>
+                <div>Bank: {formatINR(bankTotal)}</div>
+                <div>Emergency: {formatINR(emergencyTotal)}</div>
+              </div>
+            </div>
+
+            <div className={styles.kpiCard}>
+              <div className={styles.kpiLabel}>Total Liabilities</div>
+              <div className={styles.kpiValue}>{formatINR(totalLiabilities)}</div>
+              <div className={styles.kpiBreakdown}>
+                <div>Loans: {formatINR(loanTotal)}</div>
+                <div>Cards: {formatINR(cardTotal)}</div>
+                <div>Other: {formatINR(otherLiabilities)}</div>
+              </div>
+            </div>
+
+            <div className={styles.kpiCard}>
+              <div className={styles.kpiLabel}>Surplus Available</div>
+              <div className={styles.kpiValue}>{formatINR(surplus)}</div>
+              <div className={styles.kpiBreakdown}>
+                <div>Income: {formatINR(incomeMonthly)}</div>
+                <div>Expenses: {formatINR(expensesMonthly)}</div>
+                <div>Savings rate: {Number.isFinite(savingsRate) ? savingsRate : 0}%</div>
+              </div>
+            </div>
+          </section>
+
+          <section className={styles.recentCard}>
+            <div className={styles.recentHeader}>
+              <h3>Recent investments</h3>
               <button
                 type="button"
                 className={styles.secondaryButton}
-                onClick={handleUpdateDetails}
+                onClick={() => router.push("/portfolio")}
               >
-                Update details
+                View all
               </button>
             </div>
+            {investmentsLoading ? (
+              <div className={styles.emptyState}>Loading...</div>
+            ) : investmentsError ? (
+              <div className={styles.errorInline}>{investmentsError}</div>
+            ) : recentInvestments.length === 0 ? (
+              <div className={styles.emptyState}>
+                <div>No recent investments yet.</div>
+                <div>Tip: Connect Zerodha to see holdings.</div>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={() => router.push("/portfolio")}
+                >
+                  Go to Portfolio
+                </button>
+              </div>
+            ) : (
+              <div className={styles.recentList}>
+                {recentInvestments.map((inv) => {
+                  const investmentId = inv.investmentId || inv.id;
+                  const name = inv.bucketName || inv.bucketId || "Bucket";
+                  const amount = formatINR(parseINR(inv.amount));
+                  return (
+                    <div
+                      key={investmentId || `${name}-${inv.createdAt}`}
+                      className={styles.recentRow}
+                    >
+                      <div>
+                        <div className={styles.recentName}>{name}</div>
+                      </div>
+                      <div className={styles.recentAmount}>{amount || "-"}</div>
+                      <div className={styles.recentDate}>
+                        {formatInvestmentDate(inv.createdAt)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
-        )}
-
-        {error && <div className={styles.error}>{error}</div>}
-
-        {renderRightPane()}
-      </main>
+        </div>
+      </div>
     </div>
   );
 }

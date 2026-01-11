@@ -1,7 +1,6 @@
 // frontend/pages/my-plan.js
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import NavBar from "../components/NavBar";
 import { auth } from "../lib/firebase";
 
 const SIP_DELTA_OPTIONS = [-50000, -20000, -10000, 0, 5000, 10000, 20000, 50000];
@@ -71,12 +70,64 @@ function pickRecommendedBucket(payload) {
   return byFlag || byId || byRisk || buckets[0] || null;
 }
 
+function normalizeLabel(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function resolveRecommendedPlanKey(risk) {
+  const raw = normalizeLabel(
+    risk?.finalBand || risk?.quizLabel || risk?.band || risk?.label || ""
+  );
+  if (!raw) return "";
+  if (raw.includes("low") || raw.includes("conservative") || raw.includes("safety")) {
+    return "safety";
+  }
+  if (raw.includes("balanced") || raw.includes("moderate")) {
+    return "balanced";
+  }
+  if (raw.includes("high") || raw.includes("aggressive") || raw.includes("growth")) {
+    return "growth";
+  }
+  return "";
+}
+
+function planMatchesKey(planItem, key) {
+  if (!key) return false;
+  const target = normalizeLabel(key);
+  const name = normalizeLabel(planItem?.name);
+  const id = normalizeLabel(planItem?.id || planItem?.key || planItem?.slug);
+  const aliases = {
+    safety: ["safety", "low", "conservative"],
+    balanced: ["balanced", "moderate"],
+    growth: ["growth", "high", "aggressive"],
+  };
+  const checks = aliases[target] || [target];
+  return checks.some((token) => id.includes(token) || name.includes(token));
+}
+
 function PlanViewer({ plan }) {
   if (!plan) return null;
 
   const profileSummary = plan.profileSummary || {};
   const risk = plan.risk || {};
   const currentAllocation = plan.currentAllocation || {};
+  const planItems = Array.isArray(plan.plans) ? plan.plans : [];
+  const recommendedPlanKey = resolveRecommendedPlanKey(risk);
+  const selectedPlan =
+    (recommendedPlanKey && planItems.find((p) => planMatchesKey(p, recommendedPlanKey))) ||
+    planItems.find((p) => p.recommended) ||
+    planItems[0] ||
+    null;
+  const displayPlans = selectedPlan
+    ? [
+        {
+          ...selectedPlan,
+          recommended:
+            selectedPlan.recommended ||
+            (recommendedPlanKey && planMatchesKey(selectedPlan, recommendedPlanKey)),
+        },
+      ]
+    : [];
 
   return (
     <div style={{ marginTop: 14, padding: 14, border: "1px solid #e8edf5", borderRadius: 12, background: "#fff" }}>
@@ -111,7 +162,7 @@ function PlanViewer({ plan }) {
       </div>
 
       <div style={{ marginTop: 14, fontWeight: 900 }}>Plans</div>
-      {(plan.plans || []).map((p) => (
+      {displayPlans.map((p) => (
         <div key={p.id} style={{ marginTop: 10, padding: 12, border: "1px solid #eef2f8", borderRadius: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <div style={{ fontWeight: 900 }}>
@@ -395,7 +446,6 @@ export default function MyPlan() {
 
   return (
     <>
-      <NavBar />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 16px" }}>
         <h1>My Plan</h1>
         {loading ? (
